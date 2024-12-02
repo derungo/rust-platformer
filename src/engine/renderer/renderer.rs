@@ -1,50 +1,8 @@
+use crate::engine::renderer::vertex::{Vertex, VERTICES, INDICES};
+
 use wgpu::util::DeviceExt;
 use winit::window::Window;
 
-// Define the Vertex struct
-#[repr(C)]
-#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-struct Vertex {
-    position: [f32; 2],
-    color: [f32; 3],
-}
-
-impl Vertex {
-    fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
-        wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &[
-                wgpu::VertexAttribute {
-                    offset: 0,
-                    shader_location: 0,
-                    format: wgpu::VertexFormat::Float32x2,
-                },
-                wgpu::VertexAttribute {
-                    offset: std::mem::size_of::<[f32; 2]>() as wgpu::BufferAddress,
-                    shader_location: 1,
-                    format: wgpu::VertexFormat::Float32x3,
-                },
-            ],
-        }
-    }
-}
-
-// Define the vertex data for the rectangle
-const VERTICES: &[Vertex] = &[
-    Vertex { position: [-0.5, -0.5], color: [1.0, 0.0, 0.0] }, // Bottom-left
-    Vertex { position: [ 0.5, -0.5], color: [0.0, 1.0, 0.0] }, // Bottom-right
-    Vertex { position: [ 0.5,  0.5], color: [0.0, 0.0, 1.0] }, // Top-right
-    Vertex { position: [-0.5,  0.5], color: [1.0, 1.0, 0.0] }, // Top-left
-];
-
-// Define the indices for the rectangle (two triangles)
-const INDICES: &[u16] = &[
-    0, 1, 2, // First triangle
-    0, 2, 3, // Second triangle
-];
-
-// Renderer struct and implementation
 pub struct Renderer {
     surface: wgpu::Surface,
     device: wgpu::Device,
@@ -95,7 +53,7 @@ impl Renderer {
         // Load the shader
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Rectangle Shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/rectangle.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(include_str!("../../shaders/rectangle.wgsl").into()),
         });
 
         let uniform_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {

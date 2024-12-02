@@ -1,6 +1,8 @@
 mod engine;
 
-use engine::{renderer::Renderer, input::InputHandler};
+use engine::renderer::Renderer;
+use engine::input::InputHandler;
+
 use winit::{
     event::{Event, WindowEvent, VirtualKeyCode},
     event_loop::{ControlFlow, EventLoop},
