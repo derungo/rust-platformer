@@ -13,6 +13,9 @@ pub struct Renderer {
     num_indices: u32,
     uniform_buffer: wgpu::Buffer,
     uniform_bind_group: wgpu::BindGroup,
+
+    ground_uniform_buffer: wgpu::Buffer,
+    ground_bind_group: wgpu::BindGroup,
 }
 
 impl Renderer {
@@ -80,10 +83,10 @@ impl Renderer {
 
         let num_indices = INDICES.len() as u32;
         let transform_matrix: [[f32; 4]; 4] = [
-            [1.0, 0.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0, 0.0],
-            [0.0, 0.0, 1.0, 0.0],
-            [0.0, 0.0, 0.0, 1.0],
+            [1.0, 0.0, 0.0, 0.0], // scale x
+            [0.0, 1.0, 0.0, 0.0], // scale y
+            [0.0, 0.0, 1.0, 0.0], // scale z
+            [0.0, 0.0, 0.0, 1.0], // position
         ];
 
         let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -101,6 +104,29 @@ impl Renderer {
             }],
         });
 
+        // Ground transform
+        let ground_transform_matrix: [[f32; 4]; 4] = [
+            [2.0, 0.0, 0.0, 0.0], // scale x to fill width
+            [0.0, 0.1, 0.0, 0.0], // scale y for ground thickness
+            [0.0, 0.0, 1.0, 0.0],
+            [0.0, -0.55, 0.0, 1.0], // position at bottom
+        ];
+
+        let ground_uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Ground Uniform Buffer"),
+            contents: bytemuck::cast_slice(&ground_transform_matrix),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
+        let ground_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Ground Bind Group"),
+            layout: &uniform_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: ground_uniform_buffer.as_entire_binding(),
+            }],
+        });
+
         Self {
             surface,
             device,
@@ -112,6 +138,8 @@ impl Renderer {
             num_indices,
             uniform_buffer,
             uniform_bind_group,
+            ground_uniform_buffer,
+            ground_bind_group,
         }
     }
 
@@ -128,6 +156,10 @@ impl Renderer {
             0,
             bytemuck::cast_slice(&transform_matrix),
         );
+    }
+
+    pub fn render_ground(&self) {
+        // No need to update ground transform as it's static
     }
 
     pub fn render(&self) {
@@ -167,10 +199,16 @@ impl Renderer {
             });
 
             render_pass.set_pipeline(&self.pipeline);
-            render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+
+            // Render ground
+            render_pass.set_bind_group(0, &self.ground_bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass
                 .set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+            render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
+
+            // Render player
+            render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
             render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
         }
 

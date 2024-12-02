@@ -13,37 +13,89 @@ use pollster::block_on;
 struct GameState {
     player_x: f32,
     player_y: f32,
-    player_velocity: f32,
+    player_velocity_x: f32,
+    player_velocity_y: f32,
+    player_speed: f32,
+    is_jumping: bool,
+    is_crouching: bool,
+    gravity: f32,
+    jump_force: f32,
+    ground_y: f32,
 }
 
 impl GameState {
     fn new() -> Self {
         Self {
             player_x: 0.0,
-            player_y: 0.0,
-            player_velocity: 0.5, // Adjusted for coordinate system
+            player_y: -0.5, // Start on the ground
+            player_velocity_x: 0.0,
+            player_velocity_y: 0.0,
+            player_speed: 1.0, // Adjusted for coordinate system
+            is_jumping: false,
+            is_crouching: false,
+            gravity: -9.8,
+            jump_force: 5.0,
+            ground_y: -0.5, // Y position of the ground
         }
     }
 
     fn update(&mut self, input_handler: &InputHandler, delta_time: f32) {
+        // Horizontal movement
         if input_handler.is_key_pressed(VirtualKeyCode::Left)
             || input_handler.is_key_pressed(VirtualKeyCode::A)
         {
-            self.player_x -= self.player_velocity * delta_time;
-        }
-
-        if input_handler.is_key_pressed(VirtualKeyCode::Right)
+            self.player_velocity_x = -self.player_speed;
+        } else if input_handler.is_key_pressed(VirtualKeyCode::Right)
             || input_handler.is_key_pressed(VirtualKeyCode::D)
         {
-            self.player_x += self.player_velocity * delta_time;
+            self.player_velocity_x = self.player_speed;
+        } else {
+            self.player_velocity_x = 0.0;
         }
 
-        // Ensure the rectangle stays within the window bounds
+        // Jumping
+        if (input_handler.is_key_pressed(VirtualKeyCode::Up)
+            || input_handler.is_key_pressed(VirtualKeyCode::W))
+            && !self.is_jumping
+        {
+            self.player_velocity_y = self.jump_force;
+            self.is_jumping = true;
+        }
+
+        // Crouching
+        if input_handler.is_key_pressed(VirtualKeyCode::Down)
+            || input_handler.is_key_pressed(VirtualKeyCode::S)
+        {
+            self.is_crouching = true;
+        } else {
+            self.is_crouching = false;
+        }
+
+        // Apply gravity
+        self.player_velocity_y += self.gravity * delta_time;
+
+        // Update positions
+        self.player_x += self.player_velocity_x * delta_time;
+        self.player_y += self.player_velocity_y * delta_time;
+
+        // Ground collision
+        if self.player_y <= self.ground_y {
+            self.player_y = self.ground_y;
+            self.player_velocity_y = 0.0;
+            self.is_jumping = false;
+        }
+
+        // Clamp positions
         self.player_x = self.player_x.clamp(-1.0, 1.0);
     }
 
     fn render(&self, renderer: &Renderer) {
-        renderer.update_transform_matrix(self.player_x, self.player_y, 0.1, 0.1);
+        // Render the player
+        let player_height = if self.is_crouching { 0.05 } else { 0.1 };
+        renderer.update_transform_matrix(self.player_x, self.player_y, 0.1, player_height);
+
+        // Render the ground
+        renderer.render_ground();
     }
 }
 
