@@ -7,3 +7,4 @@ edition = "2021"
 winit = "0.28.5"          # For window and input handling
 wgpu = "0.16.0"           # For GPU-accelerated rendering
 pollster = "0.3.0"        # For async rendering
+bytemuck = { version = "1.7", features = ["derive"] }

@@ -2,26 +2,64 @@ mod engine;
 
 use engine::{renderer::Renderer, input::InputHandler};
 use winit::{
-    event::{Event, WindowEvent, KeyboardInput, VirtualKeyCode},
+    event::{Event, WindowEvent, VirtualKeyCode},
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
 };
 use pollster::block_on;
 use std::time::{Duration, Instant};
 
+struct GameState {
+    player_x: f32,
+    player_y: f32,
+    player_velocity: f32,
+}
+
+impl GameState {
+    fn new() -> Self {
+        Self {
+            player_x: 0.0,
+            player_y: 0.0,
+            player_velocity: 200.0,
+        }
+    }
+
+    fn update(&mut self, input_handler: &InputHandler, delta_time: f32) {
+        if input_handler.is_key_pressed(VirtualKeyCode::Left) || input_handler.is_key_pressed(VirtualKeyCode::A) {
+            self.player_x -= self.player_velocity * delta_time;
+        }
+
+        if input_handler.is_key_pressed(VirtualKeyCode::Right) || input_handler.is_key_pressed(VirtualKeyCode::D) {
+            self.player_x += self.player_velocity * delta_time;
+        }
+
+        // Ensure the rectangle stays within the window bounds
+        self.player_x = self.player_x.clamp(-1.0, 1.0);
+    }
+
+    fn render(&self, renderer: &Renderer) {
+        // Translate normalized coordinates to match screen space for simplicity
+        renderer.render_rectangle(self.player_x, self.player_y, 0.1, 0.1); // Rectangle size is 0.1 in normalized units
+    }
+}
+
 fn main() {
     // Create a window
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new()
         .with_title("Rust Platformer Engine")
+        .with_inner_size(winit::dpi::PhysicalSize::new(800, 600))
         .build(&event_loop)
         .unwrap();
 
     // Initialize the renderer
-    let mut renderer = block_on(Renderer::new(&window));
+    let renderer = block_on(Renderer::new(&window));
 
     // Initialize the input handler
     let mut input_handler = InputHandler::new();
+
+    // Game state
+    let mut game_state = GameState::new();
 
     // Game loop timing
     let target_frame_duration = Duration::from_secs_f64(1.0 / 60.0); // 60 FPS
@@ -39,35 +77,20 @@ fn main() {
                 }
                 WindowEvent::KeyboardInput { input, .. } => {
                     input_handler.update(&input);
-                    
-                    // Handle movement keys
-                    if input_handler.is_key_pressed(VirtualKeyCode::Left) || input_handler.is_key_pressed(VirtualKeyCode::A) {
-                        println!("Player moving left!");
-                    }
-                    if input_handler.is_key_pressed(VirtualKeyCode::Right) || input_handler.is_key_pressed(VirtualKeyCode::D) {
-                        println!("Player moving right!");
-                    }
-                    if input_handler.is_key_pressed(VirtualKeyCode::Space) {
-                        println!("Player jumping!");
-                    }
-                    if input_handler.is_key_pressed(VirtualKeyCode::Escape) {
-                        println!("I'm Melting!");
-                        *control_flow = ControlFlow::Exit;
-                    }
                 }
                 _ => {}
             },
             // Main game loop logic
             Event::MainEventsCleared => {
-                // Calculate delta time
                 let now = Instant::now();
-                let delta_time = now - last_update_time;
+                let delta_time = (now - last_update_time).as_secs_f32();
 
                 // Update game state if enough time has passed
-                if delta_time >= target_frame_duration {
+                if delta_time >= target_frame_duration.as_secs_f32() {
                     last_update_time = now;
 
-                    // Update your game state here
+                    // Update the game state
+                    game_state.update(&input_handler, delta_time);
                 }
 
                 // Request a redraw
@@ -75,7 +98,7 @@ fn main() {
             },
             // Render the frame
             Event::RedrawRequested(_) => {
-                renderer.render();
+                game_state.render(&renderer);
             }
             _ => {}
         }
