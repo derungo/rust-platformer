@@ -54,6 +54,8 @@ pub struct Renderer {
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
     num_indices: u32,
+    uniform_buffer: wgpu::Buffer,
+    uniform_bind_group: wgpu::BindGroup,
 }
 
 impl Renderer {
@@ -96,10 +98,26 @@ impl Renderer {
             source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/rectangle.wgsl").into()),
         });
 
+        let uniform_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("Uniform Bind Group Layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: wgpu::BufferSize::new(64),
+                    },
+                    count: None,
+                },
+            ],
+        });
+
         // Create the pipeline layout
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Pipeline Layout"),
-            bind_group_layouts: &[],
+            bind_group_layouts: &[&uniform_bind_group_layout],
             push_constant_ranges: &[],
         });
 
@@ -153,7 +171,30 @@ impl Renderer {
         });
 
         let num_indices = INDICES.len() as u32;
-
+        let transform_matrix: [[f32; 4]; 4] = [
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ];
+        
+        let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Uniform Buffer"),
+            contents: bytemuck::cast_slice(&transform_matrix),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+        
+        let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Uniform Bind Group"),
+            layout: &uniform_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: uniform_buffer.as_entire_binding(),
+                },
+            ],
+        });
+        
         Self {
             surface,
             device,
@@ -163,6 +204,8 @@ impl Renderer {
             vertex_buffer,
             index_buffer,
             num_indices,
+            uniform_buffer,
+            uniform_bind_group,
         }
     }
 
@@ -212,47 +255,59 @@ impl Renderer {
         self.surface.configure(&self.device, &self.config);
     }
 
-    pub fn render_rectangle(&self, _x: f32, _y: f32, _width: f32, _height: f32) {
-        let output = self.surface.get_current_texture().unwrap();
-        let view = output
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Render Encoder"),
-            });
+ pub fn render_rectangle(&self, x: f32, y: f32, width: f32, height: f32) {
+    // Create a transformation matrix
+    let transform_matrix: [[f32; 4]; 4] = [
+        [width, 0.0, 0.0, 0.0],
+        [0.0, height, 0.0, 0.0],
+        [0.0, 0.0, 1.0, 0.0],
+        [x, y, 0.0, 1.0],
+    ];
 
-        {
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Rectangle Render Pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.1,
-                            g: 0.2,
-                            b: 0.3,
-                            a: 1.0,
-                        }),
-                        store: true,
-                    },
-                })],
-                depth_stencil_attachment: None,
-            });
+    // Update the uniform buffer
+    self.queue.write_buffer(
+        &self.uniform_buffer,
+        0,
+        bytemuck::cast_slice(&transform_matrix),
+    );
 
-            // Set the pipeline and buffers
-            render_pass.set_pipeline(&self.pipeline);
-            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+    let output = self.surface.get_current_texture().unwrap();
+    let view = output
+        .texture
+        .create_view(&wgpu::TextureViewDescriptor::default());
+    let mut encoder = self
+        .device
+        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Render Encoder"),
+        });
 
-            // Adjust position using a transformation (not implemented here)
-            // For now, it just draws the rectangle in its default position
-            render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
-        }
+    {
+        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("Rectangle Render Pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color {
+                        r: 0.1,
+                        g: 0.2,
+                        b: 0.3,
+                        a: 1.0,
+                    }),
+                    store: true,
+                },
+            })],
+            depth_stencil_attachment: None,
+        });
 
-        self.queue.submit(Some(encoder.finish()));
-        output.present();
+        render_pass.set_pipeline(&self.pipeline);
+        render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+        render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+        render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
     }
+
+    self.queue.submit(Some(encoder.finish()));
+    output.present();
+}
 }
