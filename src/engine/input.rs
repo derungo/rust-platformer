@@ -12,7 +12,7 @@ impl InputHandler {
         }
     }
 
-    pub fn update(&mut self, input: &KeyboardInput) {
+    pub fn handle_keyboard_input(&mut self, input: KeyboardInput) {
         if let Some(key) = input.virtual_keycode {
             match input.state {
                 ElementState::Pressed => {

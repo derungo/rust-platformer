@@ -1,21 +1,24 @@
-use wgpu::Device;
+use wgpu::{BindGroupLayout, Device, RenderPipeline, SurfaceConfiguration};
 
 pub fn create_pipeline(
     device: &Device,
-    config: &wgpu::SurfaceConfiguration,
-    uniform_bind_group_layout: &wgpu::BindGroupLayout,
-) -> wgpu::RenderPipeline {
+    config: &SurfaceConfiguration,
+    uniform_bind_group_layout: &BindGroupLayout,
+) -> RenderPipeline {
+    // Load the shader
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("Rectangle Shader"),
-        source: wgpu::ShaderSource::Wgsl(include_str!("/home/pat/Projects/rust/UntitledGame/rust_platformer_engine/src/shaders/rectangle.wgsl").into()),
+        source: wgpu::ShaderSource::Wgsl(include_str!("../../shaders/rectangle.wgsl").into()),
     });
 
+    // Create the pipeline layout
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("Pipeline Layout"),
         bind_group_layouts: &[uniform_bind_group_layout],
         push_constant_ranges: &[],
     });
 
+    // Create the render pipeline
     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         label: Some("Render Pipeline"),
         layout: Some(&pipeline_layout),

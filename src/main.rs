@@ -9,7 +9,6 @@ use winit::{
     window::WindowBuilder,
 };
 use pollster::block_on;
-use std::time::{Duration, Instant};
 
 struct GameState {
     player_x: f32,
@@ -22,16 +21,20 @@ impl GameState {
         Self {
             player_x: 0.0,
             player_y: 0.0,
-            player_velocity: 200.0,
+            player_velocity: 0.5, // Adjusted for coordinate system
         }
     }
 
     fn update(&mut self, input_handler: &InputHandler, delta_time: f32) {
-        if input_handler.is_key_pressed(VirtualKeyCode::Left) || input_handler.is_key_pressed(VirtualKeyCode::A) {
+        if input_handler.is_key_pressed(VirtualKeyCode::Left)
+            || input_handler.is_key_pressed(VirtualKeyCode::A)
+        {
             self.player_x -= self.player_velocity * delta_time;
         }
 
-        if input_handler.is_key_pressed(VirtualKeyCode::Right) || input_handler.is_key_pressed(VirtualKeyCode::D) {
+        if input_handler.is_key_pressed(VirtualKeyCode::Right)
+            || input_handler.is_key_pressed(VirtualKeyCode::D)
+        {
             self.player_x += self.player_velocity * delta_time;
         }
 
@@ -40,13 +43,12 @@ impl GameState {
     }
 
     fn render(&self, renderer: &Renderer) {
-        // Translate normalized coordinates to match screen space for simplicity
-        renderer.render_rectangle(self.player_x, self.player_y, 0.1, 0.1); // Rectangle size is 0.1 in normalized units
+        renderer.update_transform_matrix(self.player_x, self.player_y, 0.1, 0.1);
     }
 }
 
 fn main() {
-    // Create a window
+    // Create an event loop and window
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new()
         .with_title("Rust Platformer Engine")
@@ -63,44 +65,34 @@ fn main() {
     // Game state
     let mut game_state = GameState::new();
 
-    // Game loop timing
-    let target_frame_duration = Duration::from_secs_f64(1.0 / 60.0); // 60 FPS
-    let mut last_update_time = Instant::now();
+    // Timing variables
+    let mut last_frame_time = std::time::Instant::now();
 
-    // Run the event loop
     event_loop.run(move |event, _, control_flow| {
-        *control_flow = ControlFlow::Poll;
+        *control_flow = ControlFlow::Poll; // Keep the event loop running
 
         match event {
-            // Handle window events
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::CloseRequested => {
                     *control_flow = ControlFlow::Exit;
                 }
                 WindowEvent::KeyboardInput { input, .. } => {
-                    input_handler.update(&input);
+                    input_handler.handle_keyboard_input(input);
                 }
                 _ => {}
             },
-            // Main game loop logic
             Event::MainEventsCleared => {
-                let now = Instant::now();
-                let delta_time = (now - last_update_time).as_secs_f32();
+                // Calculate delta time
+                let now = std::time::Instant::now();
+                let delta_time = now.duration_since(last_frame_time).as_secs_f32();
+                last_frame_time = now;
 
-                // Update game state if enough time has passed
-                if delta_time >= target_frame_duration.as_secs_f32() {
-                    last_update_time = now;
+                // Update game state
+                game_state.update(&input_handler, delta_time);
 
-                    // Update the game state
-                    game_state.update(&input_handler, delta_time);
-                }
-
-                // Request a redraw
-                window.request_redraw();
-            },
-            // Render the frame
-            Event::RedrawRequested(_) => {
+                // Render the frame
                 game_state.render(&renderer);
+                renderer.render();
             }
             _ => {}
         }
