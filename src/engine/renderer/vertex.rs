@@ -1,36 +1,38 @@
+use bytemuck::{Pod, Zeroable};
+
 #[repr(C)]
-#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Copy, Clone, Debug, Pod, Zeroable)]
 pub struct Vertex {
-    pub position: [f32; 2],
-    pub color: [f32; 3],
+    position: [f32; 3],
+    uv: [f32; 2],
 }
 
 impl Vertex {
-    pub fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
+    pub const fn new(position: [f32; 3], uv: [f32; 2]) -> Self {
+        Self { position, uv }
+    }
+
+    pub const ATTRIBS: [wgpu::VertexAttribute; 2] = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x2];
+
+    pub fn descriptor<'a>() -> wgpu::VertexBufferLayout<'a> {
+        use std::mem;
         wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+            array_stride: mem::size_of::<Vertex>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &[
-                wgpu::VertexAttribute {
-                    offset: 0,
-                    shader_location: 0,
-                    format: wgpu::VertexFormat::Float32x2,
-                },
-                wgpu::VertexAttribute {
-                    offset: std::mem::size_of::<[f32; 2]>() as wgpu::BufferAddress,
-                    shader_location: 1,
-                    format: wgpu::VertexFormat::Float32x3,
-                },
-            ],
+            attributes: &Self::ATTRIBS,
         }
     }
 }
 
+// Define the vertices of a rectangle with UV coordinates
 pub const VERTICES: &[Vertex] = &[
-    Vertex { position: [-0.5, -0.5], color: [1.0, 0.0, 0.0] },
-    Vertex { position: [ 0.5, -0.5], color: [0.0, 1.0, 0.0] },
-    Vertex { position: [ 0.5,  0.5], color: [0.0, 0.0, 1.0] },
-    Vertex { position: [-0.5,  0.5], color: [1.0, 1.0, 0.0] },
+    Vertex::new([-0.5, -0.5, 0.0], [0.0, 1.0]), // Bottom-left
+    Vertex::new([0.5, -0.5, 0.0], [1.0, 1.0]),  // Bottom-right
+    Vertex::new([0.5, 0.5, 0.0], [1.0, 0.0]),   // Top-right
+    Vertex::new([-0.5, 0.5, 0.0], [0.0, 0.0]),  // Top-left
 ];
 
-pub const INDICES: &[u16] = &[0, 1, 2, 0, 2, 3];
+pub const INDICES: &[u16] = &[
+    0, 1, 2, // First triangle
+    2, 3, 0, // Second triangle
+];

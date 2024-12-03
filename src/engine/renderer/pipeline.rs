@@ -1,56 +1,48 @@
-use wgpu::{BindGroupLayout, Device, RenderPipeline, SurfaceConfiguration};
+use wgpu::ShaderModuleDescriptor;
+use wgpu::ShaderSource;
 
 pub fn create_pipeline(
-    device: &Device,
-    config: &SurfaceConfiguration,
-    uniform_bind_group_layout: &BindGroupLayout,
-) -> RenderPipeline {
+    device: &wgpu::Device,
+    config: &wgpu::SurfaceConfiguration,
+    uniform_bind_group_layout: &wgpu::BindGroupLayout,
+    texture_bind_group_layout: &wgpu::BindGroupLayout,
+) -> wgpu::RenderPipeline {
     // Load the shader
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-        label: Some("Rectangle Shader"),
-        source: wgpu::ShaderSource::Wgsl(include_str!("../../shaders/rectangle.wgsl").into()),
+        label: Some("Shader"),
+        source: wgpu::ShaderSource::Wgsl(include_str!("shaders/shader.wgsl").into()),
     });
 
     // Create the pipeline layout
-    let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        label: Some("Pipeline Layout"),
-        bind_group_layouts: &[uniform_bind_group_layout],
-        push_constant_ranges: &[],
-    });
+    let render_pipeline_layout =
+        device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Render Pipeline Layout"),
+            bind_group_layouts: &[uniform_bind_group_layout, texture_bind_group_layout],
+            push_constant_ranges: &[],
+        });
 
     // Create the render pipeline
     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         label: Some("Render Pipeline"),
-        layout: Some(&pipeline_layout),
+        layout: Some(&render_pipeline_layout),
         vertex: wgpu::VertexState {
             module: &shader,
-            entry_point: "vs_main",
-            buffers: &[super::vertex::Vertex::desc()],
+            entry_point: "vertex_main", // Updated to match the shader's vertex entry point
+            buffers: &[crate::engine::renderer::vertex::Vertex::descriptor()],
         },
         fragment: Some(wgpu::FragmentState {
             module: &shader,
-            entry_point: "fs_main",
+            entry_point: "fragment_main", // Updated to match the shader's fragment entry point
             targets: &[Some(wgpu::ColorTargetState {
                 format: config.format,
-                blend: Some(wgpu::BlendState::REPLACE),
+                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                 write_mask: wgpu::ColorWrites::ALL,
             })],
         }),
-        primitive: wgpu::PrimitiveState {
-            topology: wgpu::PrimitiveTopology::TriangleList,
-            strip_index_format: None,
-            front_face: wgpu::FrontFace::Ccw,
-            cull_mode: Some(wgpu::Face::Back),
-            unclipped_depth: false,
-            polygon_mode: wgpu::PolygonMode::Fill,
-            conservative: false,
-        },
+
+        primitive: wgpu::PrimitiveState::default(),
         depth_stencil: None,
-        multisample: wgpu::MultisampleState {
-            count: 1,
-            mask: !0,
-            alpha_to_coverage_enabled: false,
-        },
+        multisample: wgpu::MultisampleState::default(),
         multiview: None,
     })
 }

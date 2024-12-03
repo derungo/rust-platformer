@@ -9,7 +9,7 @@ pub fn create_uniform_resources(device: &wgpu::Device) -> (wgpu::Buffer, wgpu::B
             ty: wgpu::BindingType::Buffer {
                 ty: wgpu::BufferBindingType::Uniform,
                 has_dynamic_offset: false,
-                min_binding_size: wgpu::BufferSize::new(64),
+                min_binding_size: wgpu::BufferSize::new(80),
             },
             count: None,
         }],
