@@ -1,5 +1,3 @@
-use wgpu::ShaderModuleDescriptor;
-use wgpu::ShaderSource;
 
 pub fn create_pipeline(
     device: &wgpu::Device,

@@ -1,10 +1,13 @@
+// game_loop.rs
+use crate::engine::{GameState, InputHandler, Renderer};
+
 use winit::{
-    event::{Event, WindowEvent, VirtualKeyCode},
+    event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
 };
 use pollster::block_on;
-use crate::engine::{input::InputHandler, renderer::Renderer, game_state::GameState};
+
 
 pub fn run() {
     // Create an event loop and a window
@@ -54,6 +57,8 @@ pub fn run() {
 
                 // Render the current frame
                 game_state.render(&renderer);
+
+                // Execute the rendering pipeline
                 renderer.render();
 
                 // Frame limiting for consistent rendering (60 FPS)

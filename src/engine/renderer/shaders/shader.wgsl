@@ -1,21 +1,30 @@
+// Shader Uniforms
 struct Uniforms {
-    transform: mat4x4<f32>, // Transform matrix
-    sprite_index: f32,      // Index of the sprite (0-23)
-    sprite_size: vec2<f32>, // Size of each sprite in UV space
-}
-@group(0) @binding(0)
-var<uniform> uniforms: Uniforms;
+     transform: mat4x4<f32>,  // 64 bytes
+    sprite_index: f32,       // 4 bytes
+    _padding1: f32,          // 4 bytes padding
+    sprite_size: vec2<f32>,  // 8 bytes
+};
 
+// Uniform bindings
+@group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+// Texture bindings
+@group(1) @binding(0) var sprite_sheet: texture_2d<f32>;
+@group(1) @binding(1) var sprite_sampler: sampler;
+
+// Input and output for vertex shader
 struct VertexInput {
-    @location(0) position: vec3<f32>, // Vertex position
-    @location(1) uv: vec2<f32>,       // Vertex UV
-}
+    @location(0) position: vec3<f32>,
+    @location(1) uv: vec2<f32>,
+};
 
 struct VertexOutput {
-    @builtin(position) position: vec4<f32>, // Final vertex position
-    @location(0) uv: vec2<f32>,             // UV for the fragment shader
-}
+    @builtin(position) position: vec4<f32>,
+    @location(0) uv: vec2<f32>,
+};
 
+// Vertex shader
 @vertex
 fn vertex_main(input: VertexInput) -> VertexOutput {
     var output: VertexOutput;
@@ -24,21 +33,23 @@ fn vertex_main(input: VertexInput) -> VertexOutput {
     return output;
 }
 
-@group(1) @binding(0) var sprite_sheet: texture_2d<f32>;
-@group(1) @binding(1) var sampler_: sampler;
-
+// Input for fragment shader
 struct FragmentInput {
-    @location(0) uv: vec2<f32>, // UV passed from vertex shader
-}
+    @location(0) uv: vec2<f32>,
+};
 
+// Fragment shader
 @fragment
 fn fragment_main(input: FragmentInput) -> @location(0) vec4<f32> {
-    // Compute sprite offset in UV space
-    let sprite_width = uniforms.sprite_size.x;  // Width of a single sprite
-    let sprite_offset = vec2<f32>(uniforms.sprite_index * sprite_width, 0.0); // Horizontal offset for the sprite
+    // Calculate sprite offset based on index
+    let sprite_offset = vec2<f32>(
+        fract(uniforms.sprite_index / (1.0 / uniforms.sprite_size.x)),
+        floor(uniforms.sprite_index * uniforms.sprite_size.y)
+    ) * uniforms.sprite_size;
 
-    // Transform UV coordinates to sample the specific sprite
-    let uv = sprite_offset + input.uv * uniforms.sprite_size;
+    // Adjust UV coordinates to select the correct sprite
+    let adjusted_uv = sprite_offset + input.uv * uniforms.sprite_size;
 
-    return textureSample(sprite_sheet, sampler_, uv);
+    // Sample the texture
+    return textureSample(sprite_sheet, sprite_sampler, adjusted_uv);
 }

@@ -1,11 +1,18 @@
-use crate::engine::renderer::{pipeline, vertex::INDICES, vertex::VERTICES};
+// renderer.rs
+
+use crate::engine::renderer::{pipeline, vertex};
+use crate::engine::renderer::vertex::{Vertex, VERTICES, INDICES};
+use crate::engine::uniform::{
+    create_uniform_bind_group, create_uniform_bind_group_layout, create_uniform_buffer, Uniforms,
+};
+use crate::engine::texture::{
+    create_texture_bind_group, create_texture_bind_group_layout, load_texture, Texture,
+};
+
 use wgpu::util::DeviceExt;
 use winit::window::Window;
-use image::GenericImageView;
 
-use super::vertex::Vertex;
-
-/// The `Renderer` struct handles the rendering pipeline, buffers, and rendering operations.
+/// The `Renderer` struct handles the rendering pipeline and rendering operations.
 pub struct Renderer {
     surface: wgpu::Surface,
     device: wgpu::Device,
@@ -17,35 +24,13 @@ pub struct Renderer {
     num_indices: u32,
     uniform_buffer: wgpu::Buffer,
     uniform_bind_group: wgpu::BindGroup,
-
-    ground_uniform_buffer: wgpu::Buffer,
-    ground_bind_group: wgpu::BindGroup,
-
-    // Add these fields
     texture_bind_group: wgpu::BindGroup,
-    texture_bind_group_layout: wgpu::BindGroupLayout,
-}
-
-#[repr(C)]
-#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-struct Uniforms {
-    transform: [[f32; 4]; 4],
-    sprite_index: f32,
-    sprite_size: [f32; 2],
-    _padding: [f32; 1],
 }
 
 impl Renderer {
     /// Creates a new `Renderer` instance.
-    ///
-    /// # Arguments
-    ///
-    /// * `window` - A reference to the window to create the surface for.
-    ///
-    /// # Returns
-    ///
-    /// A new `Renderer` instance.
     pub async fn new(window: &Window) -> Self {
+        // Initialize GPU resources
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::PRIMARY,
             dx12_shader_compiler: Default::default(),
@@ -66,6 +51,7 @@ impl Renderer {
             .await
             .unwrap();
 
+        // Configure the surface
         let capabilities = surface.get_capabilities(&adapter);
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -78,70 +64,18 @@ impl Renderer {
         };
         surface.configure(&device, &config);
 
-        // Uniform bind group layout
-        let uniform_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("Uniform Bind Group Layout"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: wgpu::BufferSize::new(80),
-                },
-                count: None,
-            }],
-        });
+        // Create uniform bind group layout
+        let uniform_bind_group_layout = create_uniform_bind_group_layout(&device);
 
         // Load the texture
-        let (texture, texture_view, sampler) = Self::load_texture(
-            &device,
-            &queue,
-            "/home/pat/Projects/rust/UntitledGame/rust_platformer_engine/dinochar/sheets/DinoSprites - tard.png",
-        )
-        .await;
+        let texture = load_texture(&device, &queue, "assets/spritesheet.png").await;
 
-        // Create texture bind group layout
-        let texture_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("Texture Bind Group Layout"),
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            multisampled: false,
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                        count: None,
-                    },
-                ],
-            });
+        // Create texture bind group layout and bind group
+        let texture_bind_group_layout = create_texture_bind_group_layout(&device);
+        let texture_bind_group =
+            create_texture_bind_group(&device, &texture_bind_group_layout, &texture);
 
-        // Create texture bind group
-        let texture_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("Texture Bind Group"),
-            layout: &texture_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&texture_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&sampler),
-                },
-            ],
-        });
-
-        // Create pipeline
+        // Create the render pipeline
         let pipeline = pipeline::create_pipeline(
             &device,
             &config,
@@ -153,72 +87,25 @@ impl Renderer {
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
             contents: bytemuck::cast_slice(VERTICES),
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            usage: wgpu::BufferUsages::VERTEX,
         });
-
         let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Index Buffer"),
             contents: bytemuck::cast_slice(INDICES),
             usage: wgpu::BufferUsages::INDEX,
         });
-
         let num_indices = INDICES.len() as u32;
-        let transform_matrix: [[f32; 4]; 4] = [
-            [1.0, 0.0, 0.0, 0.0], // scale x
-            [0.0, 1.0, 0.0, 0.0], // scale y
-            [0.0, 0.0, 1.0, 0.0], // scale z
-            [0.0, 0.0, 0.0, 1.0], // position
-        ];
 
-        let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Uniform Buffer"),
-            contents: bytemuck::cast_slice(&[Uniforms {
-                transform: [[1.0; 4]; 4],
-                sprite_index: 0.0,
-                _padding: [0.0],
-                sprite_size: [1.0 / 24.0, 1.0],
-              
-            }]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
-        let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("Uniform Bind Group"),
-            layout: &uniform_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: uniform_buffer.as_entire_binding(),
-            }],
-        });
+        // Initialize uniforms
+        let mut uniforms = Uniforms::new();
+        uniforms.transform = Self::create_transform_matrix(0.0, 0.0, 1.0, 1.0);
+        uniforms.sprite_index = 0.0;
+        uniforms.sprite_size = [1.0 / 24.0, 1.0]; // Adjust based on your sprite sheet
 
-        // Ground transform
-        let ground_transform_matrix: [[f32; 4]; 4] = [
-            [2.0, 0.0, 0.0, 0.0], // scale x to fill width
-            [0.0, 0.1, 0.0, 0.0], // scale y for ground thickness
-            [0.0, 0.0, 1.0, 0.0],
-            [0.0, -0.55, 0.0, 1.0], // position at bottom
-        ];
-
-        let ground_uniform_data = Uniforms {
-            transform: ground_transform_matrix,
-            sprite_index: 0.0,      // Not used for ground
-            sprite_size: [0.0, 0.0], // Not used for ground
-            _padding: [0.0],
-        };
-        
-        let ground_uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Ground Uniform Buffer"),
-            contents: bytemuck::cast_slice(&[ground_uniform_data]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
-
-        let ground_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("Ground Bind Group"),
-            layout: &uniform_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: ground_uniform_buffer.as_entire_binding(),
-            }],
-        });
+        // Create uniform buffer and bind group
+        let uniform_buffer = create_uniform_buffer(&device, &uniforms);
+        let uniform_bind_group =
+            create_uniform_bind_group(&device, &uniform_bind_group_layout, &uniform_buffer);
 
         Self {
             surface,
@@ -231,75 +118,17 @@ impl Renderer {
             num_indices,
             uniform_buffer,
             uniform_bind_group,
-            ground_uniform_buffer,
-            ground_bind_group,
             texture_bind_group,
-            texture_bind_group_layout, // Add this if needed elsewhere
         }
     }
 
-    /// Load texture function
-    pub async fn load_texture(
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        path: &str,
-    ) -> (wgpu::Texture, wgpu::TextureView, wgpu::Sampler) {
-        // Load the image
-        let img = image::open(path).expect("Failed to load texture");
-        let rgba = img.to_rgba8();
-        let dimensions = img.dimensions();
-
-        // Create the texture
-        let texture_size = wgpu::Extent3d {
-            width: dimensions.0,
-            height: dimensions.1,
-            depth_or_array_layers: 1,
-        };
-        let texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("Sprite Sheet Texture"),
-            size: texture_size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-
-        // Upload the pixel data to the texture
-        queue.write_texture(
-            wgpu::ImageCopyTexture {
-                texture: &texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            &rgba,
-            wgpu::ImageDataLayout {
-                offset: 0,
-                bytes_per_row: Some(4 * dimensions.0),
-                rows_per_image: Some(dimensions.1),
-            },
-            texture_size,
-        );
-
-        let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            label: Some("Sprite Sheet Sampler"),
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Nearest,
-            min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::FilterMode::Nearest,
-            ..Default::default()
-        });
-
-        (texture, texture_view, sampler)
-    }
-
-
-    pub fn create_transform_matrix(x: f32, y: f32, width: f32, height: f32) -> [[f32; 4]; 4] {
+    /// Creates a transformation matrix for rendering.
+    pub fn create_transform_matrix(
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+    ) -> [[f32; 4]; 4] {
         [
             [width, 0.0, 0.0, 0.0],
             [0.0, height, 0.0, 0.0],
@@ -308,10 +137,7 @@ impl Renderer {
         ]
     }
 
-    pub fn render_ground(&self) {
-        // No need to update ground transform as it's static
-    }
-
+    /// Renders the current frame.
     pub fn render(&self) {
         let output = match self.surface.get_current_texture() {
             Ok(texture) => texture,
@@ -330,12 +156,14 @@ impl Renderer {
             });
 
         {
+            // Begin render pass
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &view,
                     resolve_target: None,
                     ops: wgpu::Operations {
+                        // Clear the screen to a specific color
                         load: wgpu::LoadOp::Clear(wgpu::Color {
                             r: 0.1,
                             g: 0.2,
@@ -348,48 +176,40 @@ impl Renderer {
                 depth_stencil_attachment: None,
             });
 
+            // Set pipeline and bind groups
             render_pass.set_pipeline(&self.pipeline);
-
-            // Set bind groups
             render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
             render_pass.set_bind_group(1, &self.texture_bind_group, &[]);
 
+            // Set vertex and index buffers
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass
                 .set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+
+            // Draw the indexed vertices
             render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
         }
 
+        // Submit the commands
         self.queue.submit(Some(encoder.finish()));
         output.present();
     }
 
-    pub fn update_vertex_buffer(&self, vertices: &[Vertex]) {
-        self.queue.write_buffer(
-            &self.vertex_buffer,
-            0,
-            bytemuck::cast_slice(vertices),
-        );
-    }
-    pub fn update_uniforms(
-        &self,
-        queue: &wgpu::Queue,
-        transform: [[f32; 4]; 4],
-        sprite_index: f32,
-    ) {
-        let sprite_size = [1.0 / 24.0, 1.0]; // UV size for 24 tiles in one row
+    /// Updates the uniform buffer with new transformation and sprite index.
+    pub fn update_uniforms(&self, transform: [[f32; 4]; 4], sprite_index: f32) {
+        let sprite_size = [1.0 / 24.0, 1.0]; // Adjust based on your sprite sheet
 
-        let uniform_data = Uniforms {
+        let uniforms = Uniforms {
             transform,
             sprite_index,
+            _padding1: [0; 4],
             sprite_size,
-            _padding: [0.0], // Ensure alignment
         };
 
-        queue.write_buffer(
+        self.queue.write_buffer(
             &self.uniform_buffer,
             0,
-            bytemuck::cast_slice(&[uniform_data]),
+            bytemuck::cast_slice(&[uniforms]),
         );
     }
 }
