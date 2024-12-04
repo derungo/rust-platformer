@@ -46,7 +46,7 @@ impl GameState {
 
         Self {
             player_x: 0.0,
-            player_y: -0.5,
+            player_y: -0.55,
             player_velocity_x: 0.0,
             player_velocity_y: 0.0,
             is_jumping: false,
@@ -57,7 +57,7 @@ impl GameState {
             player_speed: 1.0,
             gravity: -9.8,
             jump_force: 5.0,
-            ground_y: -0.5,
+            ground_y: -0.7,
             sprite_index: 0,
             frame_time: 0.0,
             current_action: "idle".to_string(),
@@ -86,7 +86,7 @@ impl GameState {
         }
 
         // Crouching (S key)
-        self.is_crouching = input_handler.is_key_pressed(VirtualKeyCode::S);
+        self.is_crouching = input_handler.is_key_pressed(VirtualKeyCode::LControl);
 
         // Kicking (E key)
         self.is_kicking = input_handler.is_key_pressed(VirtualKeyCode::E);
@@ -104,11 +104,17 @@ impl GameState {
         self.player_x += self.player_velocity_x * delta_time;
         self.player_y += self.player_velocity_y * delta_time;
 
+        // Calculate player's bottom position
+        let sprite_height = 0.3; // Ensure this matches your rendering scale
+        let player_bottom = self.player_y - (sprite_height / 2.0);
+
         // Ground collision
-        if self.player_y <= self.ground_y {
-            self.player_y = self.ground_y;
-            self.player_velocity_y = 0.0;
-            self.is_jumping = false;
+        if player_bottom <= self.ground_y {
+
+        // Align the player's bottom with the ground level
+        self.player_y = self.ground_y + (sprite_height / 2.0);
+        self.player_velocity_y = 0.0;
+        self.is_jumping = false;
         }
 
         // Update current action based on movement and state
