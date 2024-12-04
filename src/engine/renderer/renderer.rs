@@ -126,17 +126,16 @@ impl Renderer {
     pub fn create_transform_matrix(
         x: f32,
         y: f32,
-        width: f32,
-        height: f32,
+        scale_x: f32,
+        scale_y: f32,
     ) -> [[f32; 4]; 4] {
         [
-            [width, 0.0, 0.0, 0.0],
-            [0.0, height, 0.0, 0.0],
-            [0.0, 0.0, 1.0, 0.0],
-            [x, y, 0.0, 1.0],
+            [scale_x, 0.0,    0.0, 0.0],
+            [0.0,    scale_y, 0.0, 0.0],
+            [0.0,    0.0,     1.0, 0.0],
+            [x,      y,       0.0, 1.0],
         ]
     }
-
     /// Renders the current frame.
     pub fn render(&self) {
         let output = match self.surface.get_current_texture() {
