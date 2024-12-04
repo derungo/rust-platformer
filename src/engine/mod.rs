@@ -1,5 +1,5 @@
 // src/engine/mod.rs
-pub mod engine;
+
 pub mod game_state;
 pub mod input;
 pub mod renderer;

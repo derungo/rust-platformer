@@ -12,7 +12,8 @@ const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 2] = wgpu::vertex_attr_array![
 ];
 
 impl Vertex {
-    pub fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
+    pub fn descriptor<'a>() -> wgpu::VertexBufferLayout<'a> {
+        use wgpu::vertex_attr_array;
         wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
@@ -20,7 +21,6 @@ impl Vertex {
         }
     }
 }
-
 pub const VERTICES: &[Vertex] = &[
     Vertex { position: [-0.5, -0.5, 0.0], uv: [0.0, 1.0] },
     Vertex { position: [ 0.5, -0.5, 0.0], uv: [1.0, 1.0] },

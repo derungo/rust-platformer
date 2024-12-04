@@ -1,9 +1,10 @@
 use wgpu::util::DeviceExt;
-
+#[repr(C)]
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Uniforms {
     pub transform: [[f32; 4]; 4], // 64 bytes
     pub sprite_index: f32,        // 4 bytes
-    _padding1: [u8; 4],           // 4 bytes padding for alignment
+    pub(crate) _padding1: [u8; 4],           // 4 bytes padding for alignment
     pub sprite_size: [f32; 2],    // 8 bytes
     // Total size: 64 + 4 + 4 + 8 = 80 bytes
 }
@@ -43,6 +44,20 @@ pub fn create_uniform_buffer(device: &wgpu::Device, uniforms: &Uniforms) -> wgpu
         usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
     })
 }
+pub fn create_uniform_bind_group(
+    device: &wgpu::Device,
+    layout: &wgpu::BindGroupLayout,
+    buffer: &wgpu::Buffer,
+) -> wgpu::BindGroup {
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("Uniform Bind Group"),
+        layout,
+        entries: &[wgpu::BindGroupEntry {
+            binding: 0,
+            resource: buffer.as_entire_binding(),
+        }],
+    })
+}
 
 pub fn create_uniform_resources(device: &wgpu::Device) -> (wgpu::Buffer, wgpu::BindGroup, wgpu::BindGroupLayout) {
     let uniform_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -59,20 +74,7 @@ pub fn create_uniform_resources(device: &wgpu::Device) -> (wgpu::Buffer, wgpu::B
         }],
     });
     
-    pub fn create_uniform_bind_group(
-        device: &wgpu::Device,
-        layout: &wgpu::BindGroupLayout,
-        buffer: &wgpu::Buffer,
-    ) -> wgpu::BindGroup {
-        device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("Uniform Bind Group"),
-            layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: buffer.as_entire_binding(),
-            }],
-        })
-    }
+    
     let transform_matrix: [[f32; 4]; 4] = [
         [1.0, 0.0, 0.0, 0.0],
         [0.0, 1.0, 0.0, 0.0],

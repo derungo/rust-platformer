@@ -1,6 +1,4 @@
 // game_state.rs
-use super::input::InputHandler;
-use super::renderer::Renderer;
 use crate::engine::input::InputHandler;
 use crate::engine::renderer::Renderer;
 use winit::event::VirtualKeyCode;
@@ -40,6 +38,8 @@ impl GameState {
         actions.insert("kick".to_string(), (11, 14));     // Kick: frames 11–14
         actions.insert("hurt".to_string(), (15, 17));     // Hurt: frames 15–17
         actions.insert("run".to_string(), (18, 24));      // Run: frames 18–24
+        actions.insert("jump".to_string(), (6, 8));     // **Add this line**
+
 
         Self {
             player_x: 0.0,
@@ -107,9 +107,14 @@ impl GameState {
 
     fn set_action(&mut self, action: &str) {
         if self.current_action != action {
-            self.current_action = action.to_string();
-            self.sprite_index = self.actions[&self.current_action].0; // Reset to first frame of the new action
-            self.frame_time = 0.0;
+            if let Some(&(start_frame, _)) = self.actions.get(action) {
+                self.current_action = action.to_string();
+                self.sprite_index = start_frame; // Reset to first frame of the new action
+                self.frame_time = 0.0;
+            } else {
+                eprintln!("Action '{}' not found in actions HashMap", action);
+                // Optionally, set to a default action or handle the error as needed
+            }
         }
     }
 

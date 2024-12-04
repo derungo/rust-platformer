@@ -2,10 +2,10 @@
 
 use crate::engine::renderer::{pipeline, vertex};
 use crate::engine::renderer::vertex::{Vertex, VERTICES, INDICES};
-use crate::engine::uniform::{
+use crate::engine::renderer::uniform::{
     create_uniform_bind_group, create_uniform_bind_group_layout, create_uniform_buffer, Uniforms,
 };
-use crate::engine::texture::{
+use crate::engine::renderer::texture::{
     create_texture_bind_group, create_texture_bind_group_layout, load_texture, Texture,
 };
 
@@ -68,7 +68,7 @@ impl Renderer {
         let uniform_bind_group_layout = create_uniform_bind_group_layout(&device);
 
         // Load the texture
-        let texture = load_texture(&device, &queue, "assets/spritesheet.png").await;
+        let texture = load_texture(&device, &queue, "assets/character/sheets/DinoSprites - tard.png").await;
 
         // Create texture bind group layout and bind group
         let texture_bind_group_layout = create_texture_bind_group_layout(&device);
