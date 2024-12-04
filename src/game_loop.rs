@@ -1,5 +1,7 @@
 // game_loop.rs
 use crate::engine::{GameState, InputHandler, Renderer};
+use crate::engine::renderer::tile::TileMap;
+use crate::engine::renderer::instance::InstanceData;
 
 use winit::{
     event::{Event, WindowEvent},
@@ -7,7 +9,6 @@ use winit::{
     window::WindowBuilder,
 };
 use pollster::block_on;
-
 
 pub fn run() {
     // Create an event loop and a window
@@ -19,13 +20,21 @@ pub fn run() {
         .expect("Failed to create window.");
 
     // Initialize the renderer
-    let renderer = block_on(Renderer::new(&window));
+    let mut renderer = block_on(Renderer::new(&window));
 
     // Initialize the input handler
     let mut input_handler = InputHandler::new();
 
     // Initialize the game state
     let mut game_state = GameState::new();
+
+    // Create the TileMap
+    let tile_map = TileMap::new_ground(
+        0.3,
+        0.3,
+        renderer.tileset_columns,
+        renderer.tileset_rows,
+    );
 
     // Timing variables for frame timing
     let mut last_frame_time = std::time::Instant::now();
@@ -45,6 +54,7 @@ pub fn run() {
                 }
                 _ => {}
             },
+
             // Handle main events cleared
             Event::MainEventsCleared => {
                 // Calculate delta time
@@ -55,11 +65,120 @@ pub fn run() {
                 // Update game state (logic and animations)
                 game_state.update(&input_handler, delta_time);
 
-                // Render the current frame
-                game_state.render(&renderer);
+                // Collect instance data
+                let mut instances = Vec::new();
 
-                // Execute the rendering pipeline
-                renderer.render();
+                // Add tiles
+                for tile in &tile_map.tiles {
+                    // Calculate UV offset and scale
+                    let tile_size_u = 1.0 / renderer.tileset_columns as f32;
+                    let tile_size_v = 1.0 / renderer.tileset_rows as f32;
+                    let u = (tile.tile_index % renderer.tileset_columns) as f32 * tile_size_u;
+                    let v = (tile.tile_index / renderer.tileset_columns) as f32 * tile_size_v;
+                    let uv_offset = [u, v];
+                    let uv_scale = [tile_size_u, tile_size_v];
+
+                    let instance_data = InstanceData {
+                        transform: Renderer::create_transform_matrix(
+                            tile.position.0,
+                            tile.position.1,
+                            tile_map.tile_width,
+                            tile_map.tile_height,
+                        ),
+                        sprite_index: 0.0,
+                        _padding1: 0.0,
+                        sprite_size: [0.0, 0.0],
+                        uv_offset,
+                        uv_scale,
+                    };
+                    instances.push(instance_data);
+                }
+
+                // Add player
+                let scale_x = if game_state.facing_right { 0.3 } else { -0.3 };
+                let instance_data = InstanceData {
+                    transform: Renderer::create_transform_matrix(
+                        game_state.player_x,
+                        game_state.player_y,
+                        scale_x,
+                        0.3,
+                    ),
+                    sprite_index: game_state.sprite_index as f32,
+                    _padding1: 0.0,
+                    sprite_size: [1.0 / 24.0, 1.0],
+                    uv_offset: [0.0, 0.0],
+                    uv_scale: [0.0, 0.0],
+                };
+                instances.push(instance_data);
+
+                // Update the instance buffer
+                renderer.queue.write_buffer(
+                    &renderer.instance_buffer,
+                    0,
+                    bytemuck::cast_slice(&instances),
+                );
+
+                // Get the output frame
+                let output = match renderer.surface.get_current_texture() {
+                    Ok(output) => output,
+                    Err(e) => {
+                        eprintln!("Failed to acquire next swap chain texture: {:?}", e);
+                        return;
+                    }
+                };
+                let view = output
+                    .texture
+                    .create_view(&wgpu::TextureViewDescriptor::default());
+                let mut encoder = renderer
+                    .device
+                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                        label: Some("Render Encoder"),
+                    });
+
+                {
+                    let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some("Render Pass"),
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                            view: &view,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Clear(wgpu::Color {
+                                    r: 0.1,
+                                    g: 0.2,
+                                    b: 0.3,
+                                    a: 1.0,
+                                }),
+                                store: true,
+                            },
+                        })],
+                        depth_stencil_attachment: None,
+                    });
+
+                    // Set pipeline and bind groups
+                    render_pass.set_pipeline(&renderer.pipeline);
+                    render_pass.set_bind_group(0, &renderer.texture_bind_group, &[]);
+
+                    // Set vertex buffers
+                    render_pass.set_vertex_buffer(0, renderer.vertex_buffer.slice(..));
+                    render_pass.set_vertex_buffer(1, renderer.instance_buffer.slice(..));
+
+                    // Set index buffer
+                    render_pass.set_index_buffer(
+                        renderer.index_buffer.slice(..),
+                        wgpu::IndexFormat::Uint16,
+                    );
+
+                    // Draw all instances in a single draw call
+                    render_pass.draw_indexed(
+                        0..renderer.num_indices,
+                        0,
+                        0..instances.len() as u32,
+                    );
+                }
+
+                // Submit commands and present frame
+                renderer.queue.submit(Some(encoder.finish()));
+                output.present();
 
                 // Frame limiting for consistent rendering (60 FPS)
                 let frame_duration = std::time::Duration::from_secs_f32(1.0 / 60.0);

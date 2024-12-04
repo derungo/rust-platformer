@@ -2,41 +2,40 @@
 
 use crate::engine::renderer::{pipeline, vertex};
 use crate::engine::renderer::vertex::{Vertex, VERTICES, INDICES};
-use crate::engine::renderer::uniform::{
-    create_uniform_bind_group, create_uniform_bind_group_layout, create_uniform_buffer, Uniforms,
-};
+
 use crate::engine::renderer::texture::{
     create_texture_bind_group, create_texture_bind_group_layout, load_texture, Texture,
 };
+use crate::engine::renderer::instance::InstanceData;
 
 use wgpu::util::DeviceExt;
 use winit::window::Window;
 
-/// The `Renderer` struct handles the rendering pipeline and rendering operations.
+use crate::engine::renderer::tile::TileMap;
+
 pub struct Renderer {
-    surface: wgpu::Surface,
-    device: wgpu::Device,
+    pub surface: wgpu::Surface,
+    pub device: wgpu::Device,
     pub queue: wgpu::Queue,
-    config: wgpu::SurfaceConfiguration,
-    pipeline: wgpu::RenderPipeline,
-    vertex_buffer: wgpu::Buffer,
-    index_buffer: wgpu::Buffer,
-    num_indices: u32,
-    uniform_buffer: wgpu::Buffer,
-    uniform_bind_group: wgpu::BindGroup,
-    texture_bind_group: wgpu::BindGroup,
+    pub config: wgpu::SurfaceConfiguration,
+    pub pipeline: wgpu::RenderPipeline,
+    pub vertex_buffer: wgpu::Buffer,
+    pub index_buffer: wgpu::Buffer,
+    pub num_indices: u32,
+    pub texture_bind_group: wgpu::BindGroup,
+    pub tileset_texture: Texture,
+    pub tileset_bind_group: wgpu::BindGroup,
+    pub tileset_columns: usize,
+    pub tileset_rows: usize,
+    pub instance_buffer: wgpu::Buffer,
 }
 
 impl Renderer {
-    /// Creates a new `Renderer` instance.
     pub async fn new(window: &Window) -> Self {
         // Initialize GPU resources
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::PRIMARY,
-            dx12_shader_compiler: Default::default(),
-        });
+        let instance = wgpu::Instance::default();
 
-        let surface = unsafe { instance.create_surface(window).unwrap() };
+        let surface = unsafe { instance.create_surface(window) }.unwrap();
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::HighPerformance,
@@ -60,26 +59,32 @@ impl Renderer {
             height: window.inner_size().height,
             present_mode: wgpu::PresentMode::Fifo,
             alpha_mode: wgpu::CompositeAlphaMode::Auto,
-            view_formats: vec![capabilities.formats[0]],
+            view_formats: vec![],
         };
         surface.configure(&device, &config);
 
-        // Create uniform bind group layout
-        let uniform_bind_group_layout = create_uniform_bind_group_layout(&device);
-
-        // Load the texture
+        // Load the character texture
         let texture = load_texture(&device, &queue, "assets/character/sheets/DinoSprites - tard.png").await;
 
-        // Create texture bind group layout and bind group
+        // Create texture bind group layout and bind group for the character
         let texture_bind_group_layout = create_texture_bind_group_layout(&device);
         let texture_bind_group =
             create_texture_bind_group(&device, &texture_bind_group_layout, &texture);
 
+        // Load the tileset texture
+        let tileset_texture = load_texture(&device, &queue, "assets/tileset/Tileset.png").await;
+        let tileset_bind_group =
+            create_texture_bind_group(&device, &texture_bind_group_layout, &tileset_texture);
+
+        // Calculate tileset dimensions
+        let tile_pixel_size = 16; // Each tile is 16x16 pixels
+        let tileset_columns = (tileset_texture.texture.size().width / tile_pixel_size) as usize;
+        let tileset_rows = (tileset_texture.texture.size().height / tile_pixel_size) as usize;
+
         // Create the render pipeline
-        let pipeline = pipeline::create_pipeline(
+        let pipeline = create_pipeline(
             &device,
             &config,
-            &uniform_bind_group_layout,
             &texture_bind_group_layout,
         );
 
@@ -96,16 +101,13 @@ impl Renderer {
         });
         let num_indices = INDICES.len() as u32;
 
-        // Initialize uniforms
-        let mut uniforms = Uniforms::new();
-        uniforms.transform = Self::create_transform_matrix(0.0, 0.0, 1.0, 1.0);
-        uniforms.sprite_index = 0.0;
-        uniforms.sprite_size = [1.0 / 24.0, 1.0]; // Adjust based on your sprite sheet
-
-        // Create uniform buffer and bind group
-        let uniform_buffer = create_uniform_buffer(&device, &uniforms);
-        let uniform_bind_group =
-            create_uniform_bind_group(&device, &uniform_bind_group_layout, &uniform_buffer);
+        // Create the instance buffer
+        let instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Instance Buffer"),
+            size: 1000 * std::mem::size_of::<InstanceData>() as wgpu::BufferAddress, // Adjust size as needed
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
 
         Self {
             surface,
@@ -116,13 +118,15 @@ impl Renderer {
             vertex_buffer,
             index_buffer,
             num_indices,
-            uniform_buffer,
-            uniform_bind_group,
             texture_bind_group,
+            tileset_texture,
+            tileset_bind_group,
+            tileset_columns,
+            tileset_rows,
+            instance_buffer,
         }
     }
 
-    /// Creates a transformation matrix for rendering.
     pub fn create_transform_matrix(
         x: f32,
         y: f32,
@@ -130,85 +134,132 @@ impl Renderer {
         scale_y: f32,
     ) -> [[f32; 4]; 4] {
         [
-            [scale_x, 0.0,    0.0, 0.0],
-            [0.0,    scale_y, 0.0, 0.0],
-            [0.0,    0.0,     1.0, 0.0],
-            [x,      y,       0.0, 1.0],
+            [scale_x, 0.0, 0.0, 0.0],
+            [0.0, scale_y, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+            [x, y, 0.0, 1.0],
         ]
     }
-    /// Renders the current frame.
-    pub fn render(&self) {
-        let output = match self.surface.get_current_texture() {
-            Ok(texture) => texture,
-            Err(e) => {
-                eprintln!("Failed to acquire next swap chain texture: {:?}", e);
-                return;
-            }
-        };
-        let view = output
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Render Encoder"),
-            });
+}
 
-        {
-            // Begin render pass
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Render Pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        // Clear the screen to a specific color
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.1,
-                            g: 0.2,
-                            b: 0.3,
-                            a: 1.0,
-                        }),
-                        store: true,
-                    },
-                })],
-                depth_stencil_attachment: None,
-            });
+// Add create_pipeline function
+pub fn create_pipeline(
+    device: &wgpu::Device,
+    config: &wgpu::SurfaceConfiguration,
+    texture_bind_group_layout: &wgpu::BindGroupLayout,
+) -> wgpu::RenderPipeline {
+    // Load the shader
+    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("Shader"),
+        source: wgpu::ShaderSource::Wgsl(include_str!("shaders/shader.wgsl").into()),
+    });
 
-            // Set pipeline and bind groups
-            render_pass.set_pipeline(&self.pipeline);
-            render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-            render_pass.set_bind_group(1, &self.texture_bind_group, &[]);
+    let vertex_layouts = [
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &[
+                // Position attribute
+                wgpu::VertexAttribute {
+                    offset: 0,
+                    shader_location: 0,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+                // Texture coordinate attribute
+                wgpu::VertexAttribute {
+                    offset: 12,
+                    shader_location: 1,
+                    format: wgpu::VertexFormat::Float32x2,
+                },
+            ],
+        },
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<InstanceData>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Instance,
+            attributes: &[
+                // Transform matrix (4x4)
+                wgpu::VertexAttribute {
+                    offset: 0,
+                    shader_location: 2,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+                wgpu::VertexAttribute {
+                    offset: 16,
+                    shader_location: 3,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+                wgpu::VertexAttribute {
+                    offset: 32,
+                    shader_location: 4,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+                wgpu::VertexAttribute {
+                    offset: 48,
+                    shader_location: 5,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+                // Sprite index
+                wgpu::VertexAttribute {
+                    offset: 64,
+                    shader_location: 6,
+                    format: wgpu::VertexFormat::Float32,
+                },
+                // Padding
+                wgpu::VertexAttribute {
+                    offset: 68,
+                    shader_location: 7,
+                    format: wgpu::VertexFormat::Float32,
+                },
+                // Sprite size
+                wgpu::VertexAttribute {
+                    offset: 72,
+                    shader_location: 8,
+                    format: wgpu::VertexFormat::Float32x2,
+                },
+                // UV offset
+                wgpu::VertexAttribute {
+                    offset: 80,
+                    shader_location: 9,
+                    format: wgpu::VertexFormat::Float32x2,
+                },
+                // UV scale
+                wgpu::VertexAttribute {
+                    offset: 88,
+                    shader_location: 10,
+                    format: wgpu::VertexFormat::Float32x2,
+                },
+            ],
+        },
+    ];
 
-            // Set vertex and index buffers
-            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            render_pass
-                .set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+    // Create the pipeline layout
+    let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("Render Pipeline Layout"),
+        bind_group_layouts: &[texture_bind_group_layout],
+        push_constant_ranges: &[],
+    });
 
-            // Draw the indexed vertices
-            render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
-        }
-
-        // Submit the commands
-        self.queue.submit(Some(encoder.finish()));
-        output.present();
-    }
-
-    /// Updates the uniform buffer with new transformation and sprite index.
-    pub fn update_uniforms(&self, transform: [[f32; 4]; 4], sprite_index: f32) {
-        let sprite_size = [1.0 / 24.0, 1.0]; // Adjust based on your sprite sheet
-
-        let uniforms = Uniforms {
-            transform,
-            sprite_index,
-            _padding1: [0; 4],
-            sprite_size,
-        };
-
-        self.queue.write_buffer(
-            &self.uniform_buffer,
-            0,
-            bytemuck::cast_slice(&[uniforms]),
-        );
-    }
+    // Create the render pipeline
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("Render Pipeline"),
+        layout: Some(&render_pipeline_layout),
+        vertex: wgpu::VertexState {
+            module: &shader,
+            entry_point: "vs_main", // Ensure this matches your shader's entry point
+            buffers: &vertex_layouts,
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &shader,
+            entry_point: "fs_main", // Ensure this matches your shader's entry point
+            targets: &[Some(wgpu::ColorTargetState {
+                format: config.format,
+                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+        }),
+        primitive: wgpu::PrimitiveState::default(),
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        multiview: None,
+    })
 }

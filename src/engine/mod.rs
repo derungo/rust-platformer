@@ -7,3 +7,4 @@ pub mod renderer;
 pub use game_state::GameState;
 pub use input::InputHandler;
 pub use renderer::Renderer;
+pub use renderer::tile::TileMap;

@@ -4,60 +4,95 @@ struct Uniforms {
     sprite_index: f32,
     _padding1: f32,
     sprite_size: vec2<f32>,
+    uv_offset: vec2<f32>,
+    uv_scale: vec2<f32>,
 };
 
 // Uniform bindings
-@group(0) @binding(0) var<uniform> uniforms: Uniforms;
+@group(0) @binding(0)
+var<uniform> uniforms: Uniforms;
 
 // Texture bindings
-@group(1) @binding(0) var sprite_sheet: texture_2d<f32>;
-@group(1) @binding(1) var sprite_sampler: sampler;
+@group(1) @binding(0)
+var sprite_sheet: texture_2d<f32>;
+@group(1) @binding(1)
+var sprite_sampler: sampler;
 
-// Input and output for vertex shader
+// Vertex input and output structures
 struct VertexInput {
     @location(0) position: vec3<f32>,
-    @location(1) uv: vec2<f32>,
+    @location(1) tex_coords: vec2<f32>,
+
+    // Instance data
+    @location(2) transform0: vec4<f32>,
+    @location(3) transform1: vec4<f32>,
+    @location(4) transform2: vec4<f32>,
+    @location(5) transform3: vec4<f32>,
+    @location(6) sprite_index: f32,
+    @location(7) _padding1: f32,
+    @location(8) sprite_size: vec2<f32>,
+    @location(9) uv_offset: vec2<f32>,
+    @location(10) uv_scale: vec2<f32>,
 };
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
-    @location(0) uv: vec2<f32>,
+    @location(0) tex_coords: vec2<f32>,
+    @location(1) sprite_index: f32,
+    @location(2) sprite_size: vec2<f32>,
 };
 
 // Vertex shader
 @vertex
-fn vertex_main(input: VertexInput) -> VertexOutput {
+fn vs_main(input: VertexInput) -> VertexOutput {
     var output: VertexOutput;
-    output.position = uniforms.transform * vec4<f32>(input.position, 1.0);
-    output.uv = input.uv;
+
+    // Construct the transformation matrix from instance data
+    let transform = mat4x4<f32>(
+        input.transform0,
+        input.transform1,
+        input.transform2,
+        input.transform3,
+    );
+
+    // Apply transformation
+    output.position = transform * vec4<f32>(input.position, 1.0);
+
+    // Calculate texture coordinates
+    output.tex_coords = input.tex_coords * input.uv_scale + input.uv_offset;
+
+    // Pass through instance data to fragment shader
+    output.sprite_index = input.sprite_index;
+    output.sprite_size = input.sprite_size;
+
     return output;
 }
 
-// Input for fragment shader
-struct FragmentInput {
-    @location(0) uv: vec2<f32>,
-};
-
 // Fragment shader
 @fragment
-fn fragment_main(input: FragmentInput) -> @location(0) vec4<f32> {
-    // Calculate number of sprites in x and y directions
-    let num_sprites_x = 1.0 / uniforms.sprite_size.x;
-    let num_sprites_y = 1.0 / uniforms.sprite_size.y;
+fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
+    // Declare adjusted_uv outside the conditional
+    var adjusted_uv: vec2<f32>;
 
-    // Calculate sprite indices
-    let sprite_index_x = uniforms.sprite_index % num_sprites_x;
-    let sprite_index_y = floor(uniforms.sprite_index / num_sprites_x);
+    // Decide whether to use sprite logic or UV logic based on sprite_size
+    if input.sprite_size.x > 0.0 && input.sprite_size.y > 0.0 {
+        // Use sprite logic for character sprites
+        let num_sprites_x = 1.0 / input.sprite_size.x;
 
-    // Calculate sprite offset
-    let sprite_offset = vec2<f32>(
-        sprite_index_x * uniforms.sprite_size.x,
-        sprite_index_y * uniforms.sprite_size.y
-    );
+        let sprite_index_x = input.sprite_index % num_sprites_x;
+        let sprite_index_y = floor(input.sprite_index / num_sprites_x);
 
-    // Adjust UV coordinates to select the correct sprite
-    let adjusted_uv = sprite_offset + input.uv * uniforms.sprite_size;
+        let sprite_offset = vec2<f32>(
+            sprite_index_x * input.sprite_size.x,
+            sprite_index_y * input.sprite_size.y,
+        );
 
-    // Sample the texture
-    return textureSample(sprite_sheet, sprite_sampler, adjusted_uv);
+        adjusted_uv = sprite_offset + input.tex_coords * input.sprite_size;
+    } else {
+        // Use UV logic for tiles
+        adjusted_uv = input.tex_coords;
+    }
+
+    // Sample the texture outside of the conditional using textureSampleLevel
+    return textureSampleLevel(sprite_sheet, sprite_sampler, adjusted_uv, 0.0);
 }

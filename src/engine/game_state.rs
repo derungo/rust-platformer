@@ -16,8 +16,7 @@ pub struct GameState {
     is_crouching: bool,
     is_running: bool,
     is_kicking: bool,
-    facing_right: bool,
-
+    pub facing_right: bool,
 
     // Constants
     player_speed: f32,
@@ -26,7 +25,7 @@ pub struct GameState {
     ground_y: f32,
 
     // Animation
-    sprite_index: usize,
+    pub sprite_index: usize,
     frame_time: f32,
     current_action: String,
     actions: HashMap<String, (usize, usize)>,
@@ -41,10 +40,9 @@ impl GameState {
         actions.insert("kick".to_string(), (11, 13));     // Kick: frames 11–14
         actions.insert("hurt".to_string(), (14, 16));     // Hurt: frames 15–17
         actions.insert("run".to_string(), (17, 23));      // Run: frames 18–23
-        actions.insert("jump".to_string(), (6, 8));     // Jump: 6-8
-        actions.insert("crouch_walk".to_string(), (19, 23));   // Crouch: frames 18-23
-        actions.insert("crouch_idle".to_string(), (18, 18));   // Crouch: frames 18-23
-
+        actions.insert("jump".to_string(), (6, 8));       // Jump: frames 6–8
+        actions.insert("crouch_walk".to_string(), (19, 23));   // Crouch walk: frames 19–23
+        actions.insert("crouch_idle".to_string(), (18, 18));   // Crouch idle: frame 18
 
         Self {
             player_x: 0.0,
@@ -70,49 +68,49 @@ impl GameState {
     pub fn update(&mut self, input_handler: &InputHandler, delta_time: f32) {
         // Reset horizontal velocity
         self.player_velocity_x = 0.0;
-    
+
         // Running
         self.is_running = input_handler.is_key_pressed(VirtualKeyCode::LShift);
-    
+
         // Movement input handling (A and D keys)
         let mut is_moving = false;
         if input_handler.is_key_pressed(VirtualKeyCode::A) {
-        self.player_velocity_x -= if self.is_running { self.player_speed * 1.5 } else { self.player_speed };
-        self.facing_right = false;
-        is_moving = true;
+            self.player_velocity_x -= if self.is_running { self.player_speed * 1.5 } else { self.player_speed };
+            self.facing_right = false;
+            is_moving = true;
         }
         if input_handler.is_key_pressed(VirtualKeyCode::D) {
-        self.player_velocity_x += if self.is_running { self.player_speed * 1.5 } else { self.player_speed };
-        self.facing_right = true;
-        is_moving = true;
-    }
-    
+            self.player_velocity_x += if self.is_running { self.player_speed * 1.5 } else { self.player_speed };
+            self.facing_right = true;
+            is_moving = true;
+        }
+
         // Crouching (S key)
         self.is_crouching = input_handler.is_key_pressed(VirtualKeyCode::S);
-    
+
         // Kicking (E key)
         self.is_kicking = input_handler.is_key_pressed(VirtualKeyCode::E);
-    
+
         // Jumping (Space bar)
         if input_handler.is_key_pressed(VirtualKeyCode::Space) && !self.is_jumping && !self.is_crouching {
             self.player_velocity_y = self.jump_force;
             self.is_jumping = true;
         }
-    
+
         // Apply gravity
         self.player_velocity_y += self.gravity * delta_time;
-    
+
         // Update positions
         self.player_x += self.player_velocity_x * delta_time;
         self.player_y += self.player_velocity_y * delta_time;
-    
+
         // Ground collision
         if self.player_y <= self.ground_y {
             self.player_y = self.ground_y;
             self.player_velocity_y = 0.0;
             self.is_jumping = false;
         }
-    
+
         // Update current action based on movement and state
         if self.is_kicking {
             self.set_action("kick");
@@ -133,7 +131,7 @@ impl GameState {
         } else {
             self.set_action("idle");
         }
-    
+
         // Update animation frame
         self.update_animation(delta_time);
     }
@@ -146,7 +144,6 @@ impl GameState {
                 self.frame_time = 0.0;
             } else {
                 eprintln!("Action '{}' not found in actions HashMap", action);
-                // Optionally, set to a default action or handle the error as needed
             }
         }
     }
@@ -154,10 +151,10 @@ impl GameState {
     fn update_animation(&mut self, delta_time: f32) {
         let animation_speed = 0.1; // Adjust as needed
         self.frame_time += delta_time;
-    
+
         if self.frame_time >= animation_speed {
             let (start_frame, end_frame) = self.actions[&self.current_action];
-    
+
             if start_frame == end_frame {
                 // Single-frame animation; keep the sprite index constant
                 self.sprite_index = start_frame;
@@ -173,27 +170,10 @@ impl GameState {
                     }
                 }
             }
-    
+
             self.frame_time = 0.0;
         }
     }
-    
 
-    pub fn render(&self, renderer: &Renderer) {
-        // Determine the scale factors
-        let scale_x = if self.facing_right { 0.3 } else { -0.3 };
-        let scale_y = 0.3;
-    
-        // Create the transform matrix
-        let transform = Renderer::create_transform_matrix(
-            self.player_x,
-            self.player_y,
-            scale_x,
-            scale_y,
-        );
-    
-        // Update the uniform buffer
-        renderer.update_uniforms(transform, self.sprite_index as f32);
-    }
-    
+  
 }
