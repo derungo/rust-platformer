@@ -66,7 +66,8 @@ pub fn run() {
                 game_state.update(&input_handler, delta_time);
 
                 // Collect instance data
-                let mut instances = Vec::new();
+                let mut tile_instances = Vec::new();
+                let mut player_instances = Vec::new();
 
                 // Add tiles
                 for tile in &tile_map.tiles {
@@ -78,7 +79,7 @@ pub fn run() {
                     let uv_offset = [u, v];
                     let uv_scale = [tile_size_u, tile_size_v];
 
-                    let instance_data = InstanceData {
+                    let tile_instance_data = InstanceData {
                         transform: Renderer::create_transform_matrix(
                             tile.position.0,
                             tile.position.1,
@@ -87,16 +88,19 @@ pub fn run() {
                         ),
                         sprite_index: 0.0,
                         _padding1: 0.0,
-                        sprite_size: [0.0, 0.0],
+                        sprite_size: [0.0, 0.0], // Use UV logic
                         uv_offset,
                         uv_scale,
                     };
-                    instances.push(instance_data);
+                    tile_instances.push(tile_instance_data);
                 }
 
                 // Add player
                 let scale_x = if game_state.facing_right { 0.3 } else { -0.3 };
-                let instance_data = InstanceData {
+                let sprite_size_x = 1.0 / 24.0; 
+                let sprite_size_y = 1.0;        
+
+                let player_instance_data = InstanceData {
                     transform: Renderer::create_transform_matrix(
                         game_state.player_x,
                         game_state.player_y,
@@ -105,18 +109,36 @@ pub fn run() {
                     ),
                     sprite_index: game_state.sprite_index as f32,
                     _padding1: 0.0,
-                    sprite_size: [1.0 / 24.0, 1.0],
+                    sprite_size: [sprite_size_x, sprite_size_y],
                     uv_offset: [0.0, 0.0],
-                    uv_scale: [0.0, 0.0],
+                    uv_scale: [1.0, 1.0],
                 };
-                instances.push(instance_data);
+                player_instances.push(player_instance_data);
 
-                // Update the instance buffer
-                renderer.queue.write_buffer(
-                    &renderer.instance_buffer,
-                    0,
-                    bytemuck::cast_slice(&instances),
-                );
+                // Calculate instance buffer offsets
+                let instance_size = std::mem::size_of::<InstanceData>() as wgpu::BufferAddress;
+                let tile_instances_len = tile_instances.len() as wgpu::BufferAddress;
+                let player_instances_len = player_instances.len() as wgpu::BufferAddress;
+                let tile_instances_size = tile_instances_len * instance_size;
+                let player_instances_size = player_instances_len * instance_size;
+
+                // Update instance buffer for tiles
+                if tile_instances_size > 0 {
+                    renderer.queue.write_buffer(
+                        &renderer.instance_buffer,
+                        0,
+                        bytemuck::cast_slice(&tile_instances),
+                    );
+                }
+
+                // Update instance buffer for player
+                if player_instances_size > 0 {
+                    renderer.queue.write_buffer(
+                        &renderer.instance_buffer,
+                        tile_instances_size,
+                        bytemuck::cast_slice(&player_instances),
+                    );
+                }
 
                 // Get the output frame
                 let output = match renderer.surface.get_current_texture() {
@@ -154,26 +176,52 @@ pub fn run() {
                         depth_stencil_attachment: None,
                     });
 
-                    // Set pipeline and bind groups
-                    render_pass.set_pipeline(&renderer.pipeline);
-                    render_pass.set_bind_group(0, &renderer.texture_bind_group, &[]);
+                    // Draw tiles
+                    if tile_instances_len > 0 {
+                        // Set pipeline and bind groups
+                        render_pass.set_pipeline(&renderer.pipeline);
+                        render_pass.set_bind_group(0, &renderer.tileset_bind_group, &[]);
 
-                    // Set vertex buffers
-                    render_pass.set_vertex_buffer(0, renderer.vertex_buffer.slice(..));
-                    render_pass.set_vertex_buffer(1, renderer.instance_buffer.slice(..));
+                        // Set vertex buffers
+                        render_pass.set_vertex_buffer(0, renderer.vertex_buffer.slice(..));
+                        render_pass.set_vertex_buffer(1, renderer.instance_buffer.slice(0..tile_instances_size));
 
-                    // Set index buffer
-                    render_pass.set_index_buffer(
-                        renderer.index_buffer.slice(..),
-                        wgpu::IndexFormat::Uint16,
-                    );
+                        // Set index buffer
+                        render_pass.set_index_buffer(
+                            renderer.index_buffer.slice(..),
+                            wgpu::IndexFormat::Uint16,
+                        );
 
-                    // Draw all instances in a single draw call
-                    render_pass.draw_indexed(
-                        0..renderer.num_indices,
-                        0,
-                        0..instances.len() as u32,
-                    );
+                        // Draw tile instances
+                        render_pass.draw_indexed(
+                            0..renderer.num_indices,
+                            0,
+                            0..tile_instances_len as u32,
+                        );
+                    }
+
+                    // Draw player
+                    if player_instances_len > 0 {
+                        // Bind the character texture
+                        render_pass.set_bind_group(0, &renderer.texture_bind_group, &[]);
+
+                        // Set vertex buffers
+                        render_pass.set_vertex_buffer(0, renderer.vertex_buffer.slice(..));
+                        render_pass.set_vertex_buffer(1, renderer.instance_buffer.slice(tile_instances_size..(tile_instances_size + player_instances_size)));
+
+                        // Set index buffer
+                        render_pass.set_index_buffer(
+                            renderer.index_buffer.slice(..),
+                            wgpu::IndexFormat::Uint16,
+                        );
+
+                        // Draw player instances
+                        render_pass.draw_indexed(
+                            0..renderer.num_indices,
+                            0,
+                            0..player_instances_len as u32,
+                        );
+                    }
                 }
 
                 // Submit commands and present frame

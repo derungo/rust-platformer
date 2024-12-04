@@ -68,8 +68,20 @@ impl Renderer {
 
         // Create texture bind group layout and bind group for the character
         let texture_bind_group_layout = create_texture_bind_group_layout(&device);
-        let texture_bind_group =
-            create_texture_bind_group(&device, &texture_bind_group_layout, &texture);
+        let texture_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &texture_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0, // Matches binding(0) in shader
+                    resource: wgpu::BindingResource::TextureView(&texture.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1, // Matches binding(1) in shader
+                    resource: wgpu::BindingResource::Sampler(&texture.sampler),
+                },
+            ],
+            label: Some("Texture Bind Group"),
+        });
 
         // Load the tileset texture
         let tileset_texture = load_texture(&device, &queue, "assets/tileset/Tileset.png").await;
@@ -101,10 +113,13 @@ impl Renderer {
         });
         let num_indices = INDICES.len() as u32;
 
+        let max_instances = 1000; // Adjust as needed
+        let instance_buffer_size = max_instances * std::mem::size_of::<InstanceData>() as wgpu::BufferAddress;
+
         // Create the instance buffer
         let instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Instance Buffer"),
-            size: 1000 * std::mem::size_of::<InstanceData>() as wgpu::BufferAddress, // Adjust size as needed
+            size: instance_buffer_size,
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });

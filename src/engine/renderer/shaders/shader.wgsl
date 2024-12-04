@@ -1,27 +1,13 @@
-// Uniforms
-struct Uniforms {
-    transform: mat4x4<f32>,
-    sprite_index: f32,
-    _padding1: f32,
-    sprite_size: vec2<f32>,
-    uv_offset: vec2<f32>,
-    uv_scale: vec2<f32>,
-};
-
-// Uniform bindings
-@group(0) @binding(0)
-var<uniform> uniforms: Uniforms;
-
 // Texture bindings
-@group(1) @binding(0)
+@group(0) @binding(0)
 var sprite_sheet: texture_2d<f32>;
-@group(1) @binding(1)
+@group(0) @binding(1)
 var sprite_sampler: sampler;
 
 // Vertex input and output structures
 struct VertexInput {
     @location(0) position: vec3<f32>,
-    @location(1) tex_coords: vec2<f32>,
+    @location(1) uv: vec2<f32>,
 
     // Instance data
     @location(2) transform0: vec4<f32>,
@@ -59,7 +45,7 @@ fn vs_main(input: VertexInput) -> VertexOutput {
     output.position = transform * vec4<f32>(input.position, 1.0);
 
     // Calculate texture coordinates
-    output.tex_coords = input.tex_coords * input.uv_scale + input.uv_offset;
+    output.tex_coords = input.uv * input.uv_scale + input.uv_offset;
 
     // Pass through instance data to fragment shader
     output.sprite_index = input.sprite_index;

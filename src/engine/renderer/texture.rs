@@ -77,20 +77,20 @@ pub fn create_texture_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGrou
     device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("Texture Bind Group Layout"),
         entries: &[
-            // Texture binding
+            // Binding 0: texture
             wgpu::BindGroupLayoutEntry {
-                binding: 0,
+                binding: 0, // Matches binding(0) in shader
                 visibility: wgpu::ShaderStages::FRAGMENT,
                 ty: wgpu::BindingType::Texture {
+                    multisampled: false,
                     sample_type: wgpu::TextureSampleType::Float { filterable: true },
                     view_dimension: wgpu::TextureViewDimension::D2,
-                    multisampled: false,
                 },
                 count: None,
             },
-            // Sampler binding
+            // Binding 1: sampler
             wgpu::BindGroupLayoutEntry {
-                binding: 1,
+                binding: 1, // Matches binding(1) in shader
                 visibility: wgpu::ShaderStages::FRAGMENT,
                 ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                 count: None,

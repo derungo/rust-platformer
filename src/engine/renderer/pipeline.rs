@@ -1,3 +1,4 @@
+//pipeline.rs
 use crate::engine::renderer::instance::InstanceData;
 
 use super::vertex::Vertex;
@@ -5,7 +6,6 @@ use super::vertex::Vertex;
 pub fn create_pipeline(
     device: &wgpu::Device,
     config: &wgpu::SurfaceConfiguration,
-    uniform_bind_group_layout: &wgpu::BindGroupLayout,
     texture_bind_group_layout: &wgpu::BindGroupLayout,
 ) -> wgpu::RenderPipeline {
     // Load the shader
@@ -94,7 +94,7 @@ pub fn create_pipeline(
     let render_pipeline_layout =
         device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Render Pipeline Layout"),
-            bind_group_layouts: &[uniform_bind_group_layout, texture_bind_group_layout],
+            bind_group_layouts: &[texture_bind_group_layout],
             push_constant_ranges: &[],
         });
 
@@ -104,12 +104,12 @@ pub fn create_pipeline(
         layout: Some(&render_pipeline_layout),
         vertex: wgpu::VertexState {
             module: &shader,
-            entry_point: "vertex_main", // Updated to match the shader's vertex entry point
-            buffers: &[crate::engine::renderer::vertex::Vertex::descriptor()],
+            entry_point: "vs_main",
+            buffers: &vertex_layouts,
         },
         fragment: Some(wgpu::FragmentState {
             module: &shader,
-            entry_point: "fragment_main", // Updated to match the shader's fragment entry point
+            entry_point: "fs_main", // Updated to match the shader's fragment entry point
             targets: &[Some(wgpu::ColorTargetState {
                 format: config.format,
                 blend: Some(wgpu::BlendState::ALPHA_BLENDING),
