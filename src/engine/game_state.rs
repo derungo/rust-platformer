@@ -37,8 +37,8 @@ impl GameState {
         actions.insert("walk".to_string(), (1, 10));      // Walk: frames 1–10
         actions.insert("kick".to_string(), (11, 14));     // Kick: frames 11–14
         actions.insert("hurt".to_string(), (15, 17));     // Hurt: frames 15–17
-        actions.insert("run".to_string(), (18, 24));      // Run: frames 18–24
-        actions.insert("jump".to_string(), (6, 8));     // **Add this line**
+        actions.insert("run".to_string(), (18, 23));      // Run: frames 18–23
+        actions.insert("jump".to_string(), (6, 8));     // Jump: 6-8
 
 
         Self {
@@ -51,7 +51,7 @@ impl GameState {
             is_running: false,
             player_speed: 1.0,
             gravity: -9.8,
-            jump_force: 5.0,
+            jump_force: 2.5,
             ground_y: -0.5,
             sprite_index: 0,
             frame_time: 0.0,

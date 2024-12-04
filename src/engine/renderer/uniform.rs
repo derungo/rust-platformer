@@ -1,3 +1,4 @@
+//uniform.rs
 use wgpu::util::DeviceExt;
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]

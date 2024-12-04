@@ -1,9 +1,9 @@
-// Shader Uniforms
+// Uniforms
 struct Uniforms {
-     transform: mat4x4<f32>,  // 64 bytes
-    sprite_index: f32,       // 4 bytes
-    _padding1: f32,          // 4 bytes padding
-    sprite_size: vec2<f32>,  // 8 bytes
+    transform: mat4x4<f32>,
+    sprite_index: f32,
+    _padding1: f32,
+    sprite_size: vec2<f32>,
 };
 
 // Uniform bindings
@@ -41,11 +41,19 @@ struct FragmentInput {
 // Fragment shader
 @fragment
 fn fragment_main(input: FragmentInput) -> @location(0) vec4<f32> {
-    // Calculate sprite offset based on index
+    // Calculate number of sprites in x and y directions
+    let num_sprites_x = 1.0 / uniforms.sprite_size.x;
+    let num_sprites_y = 1.0 / uniforms.sprite_size.y;
+
+    // Calculate sprite indices
+    let sprite_index_x = uniforms.sprite_index % num_sprites_x;
+    let sprite_index_y = floor(uniforms.sprite_index / num_sprites_x);
+
+    // Calculate sprite offset
     let sprite_offset = vec2<f32>(
-        fract(uniforms.sprite_index / (1.0 / uniforms.sprite_size.x)),
-        floor(uniforms.sprite_index * uniforms.sprite_size.y)
-    ) * uniforms.sprite_size;
+        sprite_index_x * uniforms.sprite_size.x,
+        sprite_index_y * uniforms.sprite_size.y
+    );
 
     // Adjust UV coordinates to select the correct sprite
     let adjusted_uv = sprite_offset + input.uv * uniforms.sprite_size;
