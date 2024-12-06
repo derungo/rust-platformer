@@ -233,6 +233,9 @@ fn render_frame(
     let view = output
         .texture
         .create_view(&wgpu::TextureViewDescriptor::default());
+    let depth_view = renderer
+        .depth_texture
+        .create_view(&wgpu::TextureViewDescriptor::default());
     let mut encoder = renderer
         .device
         .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -255,7 +258,14 @@ fn render_frame(
                     store: true,
                 },
             })],
-            depth_stencil_attachment: None,
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                view: &depth_view, // Attach the depth texture view
+                depth_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(1.0), // Clear to maximum depth
+                    store: true,
+                }),
+                stencil_ops: None, // No stencil operations
+            }),
         });
 
         // Ensure index buffer is correctly bound

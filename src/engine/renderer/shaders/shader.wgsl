@@ -26,6 +26,7 @@ struct VertexOutput {
     @location(0) tex_coords: vec2<f32>,
     @location(1) sprite_index: f32,
     @location(2) sprite_size: vec2<f32>,
+    @location(3) depth: f32, // Depth for the fragment shader
 };
 
 // Vertex shader
@@ -43,6 +44,10 @@ fn vs_main(input: VertexInput) -> VertexOutput {
 
     // Apply transformation
     output.position = transform * vec4<f32>(input.position, 1.0);
+
+    // Assign depth based on layer (e.g., Z-value from input.position)
+    output.position.z = input.position.z; // Assign depth to the Z-value
+    output.depth = input.position.z;
 
     // Calculate texture coordinates
     output.tex_coords = input.uv * input.uv_scale + input.uv_offset;

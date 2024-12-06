@@ -1,15 +1,12 @@
-// renderer.rs
-
 use crate::engine::renderer::vertex::{Vertex, VERTICES, INDICES};
 
 use crate::engine::renderer::texture::{
-    create_texture_bind_group, create_texture_bind_group_layout, load_texture, Texture,
+    create_texture_bind_group, create_texture_bind_group_layout, create_depth_texture, load_texture, Texture,
 };
 use crate::engine::renderer::instance::InstanceData;
 
 use wgpu::util::DeviceExt;
 use winit::window::Window;
-
 
 use super::pipeline::create_pipeline;
 
@@ -28,6 +25,7 @@ pub struct Renderer {
     pub tileset_columns: usize,
     pub tileset_rows: usize,
     pub instance_buffer: wgpu::Buffer,
+    pub depth_texture: wgpu::Texture, // Depth texture field
 }
 
 impl Renderer {
@@ -62,6 +60,9 @@ impl Renderer {
             view_formats: vec![],
         };
         surface.configure(&device, &config);
+
+        // Create the depth texture
+        let depth_texture = create_depth_texture(&device, &config);
 
         // Load the character texture
         let texture = load_texture(&device, &queue, "assets/character/sheets/DinoSprites - tard.png").await;
@@ -139,6 +140,7 @@ impl Renderer {
             tileset_columns,
             tileset_rows,
             instance_buffer,
+            depth_texture, // Include depth texture
         }
     }
 
@@ -156,4 +158,3 @@ impl Renderer {
         ]
     }
 }
-

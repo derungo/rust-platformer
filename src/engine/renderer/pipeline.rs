@@ -1,12 +1,13 @@
 use crate::engine::renderer::vertex::Vertex;
 use crate::engine::renderer::instance::InstanceData;
 
-/// Creates a render pipeline for rendering textured instances.
+/// Creates a render pipeline for rendering textured instances with depth testing.
 ///
 /// This pipeline includes support for:
 /// - Vertex attributes for position and texture coordinates.
 /// - Instance attributes for transform matrices, sprite indices, and UV offsets.
 /// - Alpha blending for semi-transparent textures.
+/// - Depth testing for proper layer ordering.
 ///
 /// # Arguments
 /// - `device`: The `wgpu::Device` used to create GPU resources.
@@ -14,10 +15,9 @@ use crate::engine::renderer::instance::InstanceData;
 /// - `texture_bind_group_layout`: The bind group layout for textures, specifying bindings for texture views and samplers.
 ///
 /// # Returns
-/// A `wgpu::RenderPipeline` configured with the specified attributes, shaders, and blending.
+/// A `wgpu::RenderPipeline` configured with the specified attributes, shaders, blending, and depth testing.
 ///
 /// # Notes
-/// - The shaders must have entry points named `vs_main` (vertex shader) and `fs_main` (fragment shader).
 /// - Ensure the vertex and instance attributes match the shader definitions.
 pub fn create_pipeline(
     device: &wgpu::Device,
@@ -37,13 +37,11 @@ pub fn create_pipeline(
             array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
             attributes: &[
-                // Position attribute (vec3)
                 wgpu::VertexAttribute {
                     offset: 0,
                     shader_location: 0,
                     format: wgpu::VertexFormat::Float32x3,
                 },
-                // Texture coordinate attribute (vec2)
                 wgpu::VertexAttribute {
                     offset: 12,
                     shader_location: 1,
@@ -56,7 +54,6 @@ pub fn create_pipeline(
             array_stride: std::mem::size_of::<InstanceData>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Instance,
             attributes: &[
-                // Transform matrix (4x4)
                 wgpu::VertexAttribute {
                     offset: 0,
                     shader_location: 2,
@@ -77,31 +74,26 @@ pub fn create_pipeline(
                     shader_location: 5,
                     format: wgpu::VertexFormat::Float32x4,
                 },
-                // Sprite index (float)
                 wgpu::VertexAttribute {
                     offset: 64,
                     shader_location: 6,
                     format: wgpu::VertexFormat::Float32,
                 },
-                // Padding (float)
                 wgpu::VertexAttribute {
                     offset: 68,
                     shader_location: 7,
                     format: wgpu::VertexFormat::Float32,
                 },
-                // Sprite size (vec2)
                 wgpu::VertexAttribute {
                     offset: 72,
                     shader_location: 8,
                     format: wgpu::VertexFormat::Float32x2,
                 },
-                // UV offset (vec2)
                 wgpu::VertexAttribute {
                     offset: 80,
                     shader_location: 9,
                     format: wgpu::VertexFormat::Float32x2,
                 },
-                // UV scale (vec2)
                 wgpu::VertexAttribute {
                     offset: 88,
                     shader_location: 10,
@@ -111,7 +103,16 @@ pub fn create_pipeline(
         },
     ];
 
-    // Create the pipeline layout, binding texture resources
+    // Configure the depth stencil state
+    let depth_stencil = wgpu::DepthStencilState {
+        format: wgpu::TextureFormat::Depth32Float,
+        depth_write_enabled: true,
+        depth_compare: wgpu::CompareFunction::Less, // Closer objects overwrite farther ones
+        stencil: wgpu::StencilState::default(),
+        bias: wgpu::DepthBiasState::default(),
+    };
+
+    // Create the pipeline layout
     let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("Render Pipeline Layout"),
         bind_group_layouts: &[texture_bind_group_layout],
@@ -137,7 +138,7 @@ pub fn create_pipeline(
             })],
         }),
         primitive: wgpu::PrimitiveState::default(),
-        depth_stencil: None,
+        depth_stencil: Some(depth_stencil), // Attach depth stencil state
         multisample: wgpu::MultisampleState::default(),
         multiview: None,
     })
