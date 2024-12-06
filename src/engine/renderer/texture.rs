@@ -1,28 +1,45 @@
-// texture.rs
-
 use wgpu::util::DeviceExt;
 use image::GenericImageView;
 use std::path::Path;
 
 /// Represents a texture along with its view and sampler.
+/// 
+/// This structure encapsulates:
+/// - The GPU texture object.
+/// - A texture view for rendering.
+/// - A sampler for filtering and addressing.
 pub struct Texture {
+    /// The GPU texture object.
     pub texture: wgpu::Texture,
+    /// The associated texture view.
     pub view: wgpu::TextureView,
+    /// The sampler used for filtering and addressing modes.
     pub sampler: wgpu::Sampler,
 }
 
-/// Loads a texture from a given file path.
+/// Loads a texture from a file and creates the associated GPU resources.
+/// 
+/// # Arguments
+/// - `device`: The `wgpu::Device` used to create the GPU resources.
+/// - `queue`: The `wgpu::Queue` used to upload texture data to the GPU.
+/// - `path`: The file path to the texture image.
+/// 
+/// # Returns
+/// A `Texture` structure containing the loaded texture, its view, and sampler.
+/// 
+/// # Panics
+/// This function will panic if the image fails to load or if the texture creation fails.
 pub async fn load_texture(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     path: &str,
 ) -> Texture {
-    // Load the image using the image crate
+    // Load the image using the `image` crate
     let img = image::open(Path::new(path)).expect("Failed to load texture");
     let rgba = img.to_rgba8();
     let dimensions = img.dimensions();
 
-    // Create the texture
+    // Create the GPU texture
     let size = wgpu::Extent3d {
         width: dimensions.0,
         height: dimensions.1,
@@ -39,7 +56,7 @@ pub async fn load_texture(
         view_formats: &[],
     });
 
-    // Upload pixel data to the texture
+    // Upload pixel data to the GPU texture
     queue.write_texture(
         wgpu::ImageCopyTexture {
             texture: &texture,
@@ -56,7 +73,7 @@ pub async fn load_texture(
         size,
     );
 
-    // Create texture view and sampler
+    // Create a texture view and sampler
     let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
     let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
         label: Some("Texture Sampler"),
@@ -72,7 +89,17 @@ pub async fn load_texture(
     Texture { texture, view, sampler }
 }
 
-/// Creates the texture bind group layout.
+/// Creates a bind group layout for textures.
+/// 
+/// This layout specifies two bindings:
+/// 1. A 2D texture.
+/// 2. A sampler for filtering and addressing modes.
+/// 
+/// # Arguments
+/// - `device`: The `wgpu::Device` used to create the bind group layout.
+/// 
+/// # Returns
+/// A `wgpu::BindGroupLayout` configured for textures and samplers.
 pub fn create_texture_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
     device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("Texture Bind Group Layout"),
@@ -99,7 +126,18 @@ pub fn create_texture_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGrou
     })
 }
 
-/// Creates the texture bind group.
+/// Creates a bind group for a specific texture and its sampler.
+/// 
+/// # Arguments
+/// - `device`: The `wgpu::Device` used to create the bind group.
+/// - `layout`: The bind group layout created for textures and samplers.
+/// - `texture`: The texture to be bound.
+/// 
+/// # Returns
+/// A `wgpu::BindGroup` that binds the texture and sampler.
+/// 
+/// # Notes
+/// Ensure the layout is compatible with the shaders used.
 pub fn create_texture_bind_group(
     device: &wgpu::Device,
     layout: &wgpu::BindGroupLayout,
