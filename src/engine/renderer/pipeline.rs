@@ -1,7 +1,5 @@
-//pipeline.rs
+use crate::engine::renderer::vertex::Vertex;
 use crate::engine::renderer::instance::InstanceData;
-
-use super::vertex::Vertex;
 
 pub fn create_pipeline(
     device: &wgpu::Device,
@@ -13,6 +11,7 @@ pub fn create_pipeline(
         label: Some("Shader"),
         source: wgpu::ShaderSource::Wgsl(include_str!("shaders/shader.wgsl").into()),
     });
+
     let vertex_layouts = [
         wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
@@ -90,13 +89,13 @@ pub fn create_pipeline(
             ],
         },
     ];
+
     // Create the pipeline layout
-    let render_pipeline_layout =
-        device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("Render Pipeline Layout"),
-            bind_group_layouts: &[texture_bind_group_layout],
-            push_constant_ranges: &[],
-        });
+    let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("Render Pipeline Layout"),
+        bind_group_layouts: &[texture_bind_group_layout],
+        push_constant_ranges: &[],
+    });
 
     // Create the render pipeline
     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -109,14 +108,13 @@ pub fn create_pipeline(
         },
         fragment: Some(wgpu::FragmentState {
             module: &shader,
-            entry_point: "fs_main", // Updated to match the shader's fragment entry point
+            entry_point: "fs_main",
             targets: &[Some(wgpu::ColorTargetState {
                 format: config.format,
                 blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                 write_mask: wgpu::ColorWrites::ALL,
             })],
         }),
-
         primitive: wgpu::PrimitiveState::default(),
         depth_stencil: None,
         multisample: wgpu::MultisampleState::default(),
