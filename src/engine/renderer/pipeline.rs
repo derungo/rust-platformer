@@ -1,3 +1,4 @@
+//pipeline.rs
 use crate::engine::renderer::vertex::Vertex;
 use crate::engine::renderer::instance::InstanceData;
 
@@ -138,7 +139,13 @@ pub fn create_pipeline(
             })],
         }),
         primitive: wgpu::PrimitiveState::default(),
-        depth_stencil: Some(depth_stencil), // Attach depth stencil state
+        depth_stencil: Some(wgpu::DepthStencilState {
+            format: wgpu::TextureFormat::Depth32Float,
+            depth_write_enabled: true,
+            depth_compare: wgpu::CompareFunction::Less,
+            stencil: wgpu::StencilState::default(),
+            bias: wgpu::DepthBiasState::default(),
+        }),
         multisample: wgpu::MultisampleState::default(),
         multiview: None,
     })

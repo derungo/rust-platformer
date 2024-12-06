@@ -46,8 +46,8 @@ fn vs_main(input: VertexInput) -> VertexOutput {
     output.position = transform * vec4<f32>(input.position, 1.0);
 
     // Assign depth based on layer (e.g., Z-value from input.position)
-    output.position.z = input.position.z; // Assign depth to the Z-value
-    output.depth = input.position.z;
+    //output.position.z = input.position.z; // Assign depth to the Z-value
+    //output.depth = input.position.z;
 
     // Calculate texture coordinates
     output.tex_coords = input.uv * input.uv_scale + input.uv_offset;

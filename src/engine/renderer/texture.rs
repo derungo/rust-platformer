@@ -1,3 +1,4 @@
+//texture.rs
 use wgpu::util::DeviceExt;
 use image::GenericImageView;
 use std::collections::HashMap;
@@ -15,6 +16,8 @@ pub struct Texture {
     pub texture: Arc<wgpu::Texture>,
     pub view: Arc<wgpu::TextureView>,
     pub sampler: Arc<wgpu::Sampler>,
+    pub width: u32,  // Add width
+    pub height: u32, // Add height
 }
 
 impl Clone for Texture {
@@ -23,6 +26,8 @@ impl Clone for Texture {
             texture: Arc::clone(&self.texture),
             view: Arc::clone(&self.view),
             sampler: Arc::clone(&self.sampler),
+            width: self.width,
+            height: self.height,
         }
     }
 }
@@ -70,6 +75,7 @@ pub async fn load_texture(
         height: dimensions.1,
         depth_or_array_layers: 1,
     };
+    
     let texture = Arc::new(device.create_texture(&wgpu::TextureDescriptor {
         label: Some("Texture"),
         size,
@@ -110,8 +116,13 @@ pub async fn load_texture(
         mipmap_filter: wgpu::FilterMode::Nearest,
         ..Default::default()
     }));
-
-    let texture = Texture { texture, view, sampler };
+    let texture = Texture { 
+        texture, 
+        view, 
+        sampler, 
+        width: dimensions.0, 
+        height: dimensions.1 
+    };
 
     // Cache the texture for future use
     cache.insert(path.to_string(), texture.clone());

@@ -1,3 +1,4 @@
+//renderer.rs
 use crate::engine::renderer::vertex::{Vertex, VERTICES, INDICES};
 
 use crate::engine::renderer::texture::{
@@ -26,6 +27,8 @@ pub struct Renderer {
     pub tileset_rows: usize,
     pub instance_buffer: wgpu::Buffer,
     pub depth_texture: wgpu::Texture, // Depth texture field
+    pub background_textures: Vec<Texture>, // Store textures for background layers
+    pub background_bind_groups: Vec<wgpu::BindGroup>, // Bind groups for the backgrounds
 }
 
 impl Renderer {
@@ -125,36 +128,58 @@ impl Renderer {
             mapped_at_creation: false,
         });
 
-        Self {
-            surface,
-            device,
-            queue,
-            config,
-            pipeline,
-            vertex_buffer,
-            index_buffer,
-            num_indices,
-            texture_bind_group,
-            tileset_texture,
-            tileset_bind_group,
-            tileset_columns,
-            tileset_rows,
-            instance_buffer,
-            depth_texture, // Include depth texture
-        }
-    }
+    // Load background textures
+    let background_paths = vec![
+        "assets/tileset/BG1.png", // Far background
+        "assets/tileset/BG2.png", // Middle background
+        "assets/tileset/BG3.png", // Near background
+    ];
 
-    pub fn create_transform_matrix(
-        x: f32,
-        y: f32,
-        scale_x: f32,
-        scale_y: f32,
-    ) -> [[f32; 4]; 4] {
-        [
-            [scale_x, 0.0, 0.0, 0.0],
-            [0.0, scale_y, 0.0, 0.0],
-            [0.0, 0.0, 1.0, 0.0],
-            [x, y, 0.0, 1.0],
-        ]
+    let mut background_textures = Vec::new();
+    let mut background_bind_groups = Vec::new();
+
+    for path in background_paths {
+        let texture = load_texture(&device, &queue, path).await;
+        let bind_group = create_texture_bind_group(&device, &texture_bind_group_layout, &texture);
+
+        background_textures.push(texture);
+        background_bind_groups.push(bind_group);
     }
+    
+
+    Self {
+        surface,
+        device,
+        queue,
+        config,
+        pipeline,
+        vertex_buffer,
+        index_buffer,
+        num_indices,
+        texture_bind_group,
+        tileset_texture,
+        tileset_bind_group,
+        tileset_columns,
+        tileset_rows,
+        instance_buffer,
+        depth_texture,
+        background_textures,
+        background_bind_groups, // Include depth texture
+    }
+}
+
+pub fn create_transform_matrix(
+    x: f32,
+    y: f32,
+    z: f32,
+    scale_x: f32,
+    scale_y: f32,
+) -> [[f32; 4]; 4] {
+    [
+        [scale_x, 0.0,    0.0,    0.0],
+        [0.0,    scale_y, 0.0,    0.0],
+        [0.0,    0.0,     1.0,    0.0],
+        [x,      y,       z,      1.0],
+    ]
+}
 }

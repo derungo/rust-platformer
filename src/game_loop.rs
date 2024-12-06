@@ -9,6 +9,7 @@ use winit::{
 use pollster::block_on;
 
 /// Runs the main game loop, initializing the window, handling events, and rendering frames.
+/// Runs the main game loop, initializing the window, handling events, and rendering frames.
 pub fn run() {
     // Create an event loop and a window
     let event_loop = EventLoop::new();
@@ -35,6 +36,34 @@ pub fn run() {
         renderer.tileset_rows,
     );
 
+    // Calculate scaling factors for each background layer based on their image sizes
+    let window_width = window.inner_size().width as f32;
+    let window_height = window.inner_size().height as f32;
+
+    let mut background_instances = Vec::new();
+
+    for (i, bg_texture) in renderer.background_textures.iter().enumerate() {
+        let background_scale_x = window_width / bg_texture.width as f32;
+        let background_scale_y = window_height / bg_texture.height as f32;
+
+        let z = 1.0 - (i as f32 * 0.2); // Example: Furthest layer at z=1.0, closer layers decreasing z
+
+        background_instances.push(InstanceData {
+            transform: Renderer::create_transform_matrix(
+                0.0,                  // x position
+                0.0,                  // y position
+                z,                    // z depth
+                background_scale_x,   // scale_x to fill the window
+                background_scale_y,   // scale_y to fill the window
+            ),
+            sprite_index: 0.0,
+            _padding1: 0.0,
+            sprite_size: [1.0, 1.0],
+            uv_offset: [0.0, 0.0],
+            uv_scale: [1.0, 1.0],
+        });
+    }
+
     // Timing variables for frame timing
     let mut last_frame_time = std::time::Instant::now();
 
@@ -49,7 +78,12 @@ pub fn run() {
 
                 let (tile_instances, player_instances) = prepare_instances(&tile_map, &game_state, &renderer);
 
-                update_instance_buffers(&renderer, &tile_instances, &player_instances);
+                update_instance_buffers(
+                    &renderer,
+                    &background_instances,
+                    &tile_instances,
+                    &player_instances,
+                );
 
                 render_frame(&renderer, &tile_instances, &player_instances);
 
@@ -61,6 +95,7 @@ pub fn run() {
         }
     });
 }
+
 
 /// Handles window-related events such as closing the application and keyboard input.
 ///
@@ -134,12 +169,17 @@ fn prepare_instances(
         let uv_offset = [u, v];
         let uv_scale = [tile_size_u, tile_size_v];
 
+        let tile_z = 0.0; // Ground level
+        let tile_scale_x = tile_map.tile_width; // e.g., 1.0
+        let tile_scale_y = tile_map.tile_height; // e.g., 1.0
+
         tile_instances.push(InstanceData {
             transform: Renderer::create_transform_matrix(
                 tile.position.0,
                 tile.position.1,
-                tile_map.tile_width,
-                tile_map.tile_height,
+                tile_z,
+                tile_scale_x,
+                tile_scale_y,
             ),
             sprite_index: 0.0,
             _padding1: 0.0,
@@ -150,7 +190,9 @@ fn prepare_instances(
     }
 
     // Prepare player instance
+    let player_z = -0.5; // In front of tiles
     let scale_x = if game_state.facing_right { 0.3 } else { -0.3 };
+    let scale_y = 0.3; // Non-zero scaling
 
     // Calculate UV offset and scale for player
     let sprite_width = 1.0 / 24.0; // Fixed sprite width (24 columns in the tileset)
@@ -162,12 +204,13 @@ fn prepare_instances(
         transform: Renderer::create_transform_matrix(
             game_state.player_x,
             game_state.player_y,
+            player_z,
             scale_x,
-            0.3,
+            scale_y,
         ),
         sprite_index: game_state.sprite_index as f32,
         _padding1: 0.0,
-        sprite_size: [sprite_width, sprite_height], // Matches the working code
+        sprite_size: [sprite_width, sprite_height],
         uv_offset,
         uv_scale,
     });
@@ -177,38 +220,57 @@ fn prepare_instances(
 
 
 
+
 /// Updates the instance buffer data for the renderer.
 ///
 /// # Arguments
 ///
 /// * renderer - The renderer to update the buffers for.
+/// * background_instances - Instance data for the background layers.
 /// * tile_instances - Instance data for tiles.
 /// * player_instances - Instance data for the player.
 fn update_instance_buffers(
     renderer: &Renderer,
+    background_instances: &[InstanceData],
     tile_instances: &[InstanceData],
     player_instances: &[InstanceData],
 ) {
     let instance_size = std::mem::size_of::<InstanceData>() as wgpu::BufferAddress;
+
+    // Calculate buffer offsets
+    let background_instances_size = background_instances.len() as wgpu::BufferAddress * instance_size;
     let tile_instances_size = tile_instances.len() as wgpu::BufferAddress * instance_size;
     let player_instances_size = player_instances.len() as wgpu::BufferAddress * instance_size;
 
-    if tile_instances_size > 0 {
+    // Write background instances
+    if !background_instances.is_empty() {
         renderer.queue.write_buffer(
             &renderer.instance_buffer,
             0,
+            bytemuck::cast_slice(background_instances),
+        );
+    }
+
+    // Write tile instances
+    if !tile_instances.is_empty() {
+        renderer.queue.write_buffer(
+            &renderer.instance_buffer,
+            background_instances_size,
             bytemuck::cast_slice(tile_instances),
         );
     }
 
-    if player_instances_size > 0 {
+    // Write player instances
+    if !player_instances.is_empty() {
         renderer.queue.write_buffer(
             &renderer.instance_buffer,
-            tile_instances_size,
+            background_instances_size + tile_instances_size,
             bytemuck::cast_slice(player_instances),
         );
     }
 }
+
+
 
 /// Renders a frame by issuing draw calls to the GPU.
 ///
@@ -259,50 +321,77 @@ fn render_frame(
                 },
             })],
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                view: &depth_view, // Attach the depth texture view
+                view: &depth_view,
                 depth_ops: Some(wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(1.0), // Clear to maximum depth
+                    load: wgpu::LoadOp::Clear(1.0),
                     store: true,
                 }),
-                stencil_ops: None, // No stencil operations
+                stencil_ops: None,
             }),
         });
 
-        // Ensure index buffer is correctly bound
+        // Ensure index buffer is bound
         render_pass.set_index_buffer(
-            renderer.index_buffer.slice(..), // Full index buffer slice
+            renderer.index_buffer.slice(..),
             wgpu::IndexFormat::Uint16,
         );
 
-        // Draw tiles
+        // Render background layers
+        for (i, bind_group) in renderer.background_bind_groups.iter().enumerate() {
+            let offset = i as wgpu::BufferAddress * std::mem::size_of::<InstanceData>() as wgpu::BufferAddress;
+            render_pass.set_vertex_buffer(
+                1,
+                renderer.instance_buffer.slice(
+                    offset..offset + std::mem::size_of::<InstanceData>() as wgpu::BufferAddress,
+                ),
+            );
+
+            render_pass.set_pipeline(&renderer.pipeline);
+            render_pass.set_bind_group(0, bind_group, &[]);
+            render_pass.set_vertex_buffer(0, renderer.vertex_buffer.slice(..));
+            render_pass.set_vertex_buffer(1, renderer.instance_buffer.slice(offset..offset + std::mem::size_of::<InstanceData>() as wgpu::BufferAddress));
+            render_pass.draw_indexed(0..renderer.num_indices, 0, 0..1); // Ensure `num_indices` matches `INDICES`
+        }
+
+        // Render tiles
         if !tile_instances.is_empty() {
+            let background_instances_size = renderer.background_bind_groups.len() as wgpu::BufferAddress
+                * std::mem::size_of::<InstanceData>() as wgpu::BufferAddress;
+
             render_pass.set_pipeline(&renderer.pipeline);
             render_pass.set_bind_group(0, &renderer.tileset_bind_group, &[]);
             render_pass.set_vertex_buffer(0, renderer.vertex_buffer.slice(..));
-            render_pass.set_vertex_buffer(1, renderer.instance_buffer.slice(..));
+            render_pass.set_vertex_buffer(
+                1,
+                renderer
+                    .instance_buffer
+                    .slice(background_instances_size..background_instances_size + tile_instances.len() as wgpu::BufferAddress * std::mem::size_of::<InstanceData>() as wgpu::BufferAddress),
+            );
             render_pass.draw_indexed(
-                0..renderer.num_indices, // Use the full index range for tiles
+                0..renderer.num_indices,
                 0,
                 0..tile_instances.len() as u32,
             );
         }
 
-        // Draw player
+        // Render player
         if !player_instances.is_empty() {
-            let instance_size = std::mem::size_of::<InstanceData>() as wgpu::BufferAddress;
-            let tile_instances_size = tile_instances.len() as wgpu::BufferAddress * instance_size;
-            let player_instances_size = player_instances.len() as wgpu::BufferAddress * instance_size;
+            let background_instances_size = renderer.background_bind_groups.len() as wgpu::BufferAddress
+                * std::mem::size_of::<InstanceData>() as wgpu::BufferAddress;
+            let tile_instances_size = tile_instances.len() as wgpu::BufferAddress
+                * std::mem::size_of::<InstanceData>() as wgpu::BufferAddress;
 
+            render_pass.set_pipeline(&renderer.pipeline);
             render_pass.set_bind_group(0, &renderer.texture_bind_group, &[]);
             render_pass.set_vertex_buffer(0, renderer.vertex_buffer.slice(..));
             render_pass.set_vertex_buffer(
                 1,
                 renderer
                     .instance_buffer
-                    .slice(tile_instances_size..(tile_instances_size + player_instances_size)),
+                    .slice(background_instances_size + tile_instances_size..background_instances_size + tile_instances_size + player_instances.len() as wgpu::BufferAddress * std::mem::size_of::<InstanceData>() as wgpu::BufferAddress),
             );
             render_pass.draw_indexed(
-                0..renderer.num_indices, // Use the full index range for the player
+                0..renderer.num_indices,
                 0,
                 0..player_instances.len() as u32,
             );
@@ -312,3 +401,4 @@ fn render_frame(
     renderer.queue.submit(Some(encoder.finish()));
     output.present();
 }
+
