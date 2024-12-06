@@ -9,3 +9,6 @@ wgpu = "0.16.0"           # For GPU-accelerated rendering
 pollster = "0.3.0"        # For async rendering
 bytemuck = { version = "1.7", features = ["derive"] }
 image = "0.24"
+log = "0.4"
+lazy_static = "1.4"
+env_logger = "0.10"
